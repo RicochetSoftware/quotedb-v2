@@ -53,6 +53,32 @@ it('backfills a populated legacy database and atomically upgrades the bot withou
     (await sql`select revision from discord_bot.guild_settings where guild_id='guild'`)[0]
       ?.revision,
   ).toBe('original')
+  // Invalid credentials must leave the legacy connection and personal collection untouched.
+  await expect(upgradeConnections(sql, undefined)).rejects.toThrow('BOT_ENCRYPTION_KEY required')
+  for (const [candidate, error] of [
+    ['bad-format', 'Invalid saved API credential'],
+    ['qdb_test_!_secret', 'Invalid token ID'],
+    [`qdb_test_${'z'.repeat(30)}_secret`, 'Invalid token ID'],
+    [`qdb_test_2_${'a'.repeat(32)}`, 'does not match'],
+    [`qdb_test_1_${'b'.repeat(32)}`, 'does not match'],
+  ] as const) {
+    await sql`update discord_bot.guild_settings set credential=${encrypt(key, 'guild', candidate)} where guild_id='guild'`
+    await expect(upgradeConnections(sql, key)).rejects.toThrow(error)
+    expect((await sql`select kind from collections where id=${owner}`)[0]?.kind).toBe('personal')
+  }
+  await sql`update discord_bot.guild_settings set credential=${encrypt(key, 'guild', raw)} where guild_id='guild'`
+  for (const column of ['revoked_at', 'expires_at']) {
+    await sql.unsafe(`update api_tokens set ${column} = '2020-01-01'`)
+    await expect(upgradeConnections(sql, key)).rejects.toThrow('expired or revoked')
+    await sql.unsafe(`update api_tokens set ${column} = null`)
+  }
+  await sql`update api_tokens set scopes=array['quotes:read']`
+  await expect(upgradeConnections(sql, key)).rejects.toThrow('missing required quote scopes')
+  expect(
+    (await sql`select revision from discord_bot.guild_settings where guild_id='guild'`)[0]
+      ?.revision,
+  ).toBe('original')
+  await sql`update api_tokens set scopes=array['quotes:read','quotes:write']`
   await upgradeConnections(sql, key)
   const settings = (await sql`select * from discord_bot.guild_settings where guild_id='guild'`)[0]
   assert(settings)

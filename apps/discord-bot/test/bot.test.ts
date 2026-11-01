@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto'
+import { ApiError } from '@quotedb/shared'
 import type { Client, Interaction, Message } from 'discord.js'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createBot } from '../src/bot.js'
+import { createBot, userMessage } from '../src/bot.js'
 import type { Settings, Store } from '../src/db/store.js'
 import type { Env } from '../src/env.js'
 import { encrypt } from '../src/security/credentials.js'
@@ -43,7 +44,11 @@ const member = {
 }
 const guild = {
   ownerId: 'owner',
-  members: { fetch: vi.fn(async () => member), me: member },
+  members: {
+    fetch: vi.fn(async (_id?: unknown) => member),
+    me: member as typeof member | null,
+    fetchMe: vi.fn(async () => member),
+  },
   channels: { fetch: vi.fn(async () => channel), cache: new Map() },
   roles: { cache: new Map() },
 }
@@ -89,6 +94,10 @@ function event(
 const send = (e: ReturnType<typeof event>) => bot.interaction(e as unknown as Interaction)
 beforeEach(() => {
   administrator = false
+  guild.members.fetch.mockReset().mockResolvedValue(member)
+  guild.members.me = member
+  guild.channels.cache.clear()
+  guild.roles.cache.clear()
   settings = {
     guild_id: '123',
     credential: encrypt(env.key, '123', 'quotedb-secret'),
@@ -123,6 +132,8 @@ afterEach(() => {
   bot.stop()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 it('reads five random quotes using only this server credential', async () => {
   const e = event('slash', 'random')
@@ -468,6 +479,382 @@ it('uses separate credentials for another allowed server', async () => {
 it('rejects commands and forms from servers outside the allowlist', async () => {
   await send(event('slash', 'random', { guildId: '789' }))
   await send(event('slash', 'create', { guildId: '789' }))
+  expect(store.get).not.toHaveBeenCalled()
+  expect(transport).not.toHaveBeenCalled()
+})
+
+function controlId(e: ReturnType<typeof event>, index = 0) {
+  const payload = e.editReply.mock.calls[0]?.[0] as {
+    components: { components: { data: { custom_id: string } }[] }[]
+  }
+  const id = payload.components[0]?.components[index]?.data.custom_id
+  if (!id) throw new Error('Expected a component custom ID')
+  return id
+}
+const tokenInfo = {
+  kind: 'collection',
+  collection: { id: 'owner', name: 'Owner', kind: 'shared' },
+  scopes: ['quotes:read', 'quotes:write'],
+  prefix: 'safe',
+  expires_at: null,
+}
+const manual = () =>
+  event('modal', 'create', {
+    fields: { getTextInputValue: (name: string) => (name === 'date' ? '' : 'hello') },
+  })
+function sourceMessage(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'source',
+    inGuild: () => true,
+    guildId: '123',
+    guild,
+    author: { id: 'author', username: 'Original' },
+    channelId: 'channel',
+    channel,
+    content: 'source words',
+    createdAt: new Date('2019-01-01Z'),
+    mentions: { users: new Map() },
+    ...overrides,
+  }
+}
+function mentioningMessage(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'message-event',
+    guildId: '123',
+    channelId: 'channel',
+    author: { bot: false, id: 'user' },
+    mentions: { users: new Map([['bot', {}]]) },
+    reference: { messageId: 'source' },
+    fetchReference: vi.fn(async () => sourceMessage()),
+    reply: vi.fn(async () => {}),
+    ...overrides,
+  }
+}
+
+it.each([
+  [401, 'connection needs attention'],
+  [403, 'connection needs attention'],
+  [429, 'wait a minute'],
+  [404, 'No quotes'],
+  [400, 'Check the text'],
+  [500, 'try again later'],
+])('gives actionable, credential-free feedback for HTTP %i', (status, message) => {
+  expect(userMessage(new ApiError(Number(status), 'private server detail', null))).toContain(
+    message,
+  )
+  expect(userMessage(new ApiError(Number(status), 'private server detail', null))).not.toContain(
+    'private server detail',
+  )
+})
+
+it('prompts an unconnected server to set up its collection', async () => {
+  settings.credential = null
+  const e = event('slash', 'random')
+  await send(e)
+  expect(e.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('not connected') }),
+  )
+  expect(transport).not.toHaveBeenCalled()
+})
+
+it.each([false, true])(
+  'checks current channel permissions (bot permissions: %s)',
+  async (botPermissions) => {
+    vi.spyOn(permissions, 'has').mockImplementation((...args: unknown[]) =>
+      botPermissions ? !Array.isArray(args[0]) : false,
+    )
+    const e = event('slash', 'random')
+    await send(e)
+    expect(e.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(botPermissions ? 'bot needs permission' : 'cannot access'),
+      }),
+    )
+    expect(transport).not.toHaveBeenCalled()
+  },
+)
+
+it('throttles repeated commands and permits them after the cooldown', async () => {
+  vi.useFakeTimers()
+  await send(event('slash', 'random'))
+  const repeated = event('slash', 'random')
+  await send(repeated)
+  expect(transport).toHaveBeenCalledTimes(1)
+  expect(repeated.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('wait a moment') }),
+  )
+  vi.advanceTimersByTime(4000)
+  await send(event('slash', 'random'))
+  expect(transport).toHaveBeenCalledTimes(2)
+})
+
+it('bounds pending confirmations and frees expired controls for new commands', async () => {
+  bot.stop()
+  vi.useFakeTimers()
+  bot = createBot(
+    { guilds: { fetch: async () => guild }, user: { id: 'bot' } } as unknown as Client,
+    env,
+    store,
+  )
+  administrator = true
+  const first = event('button', 'settings:disconnect')
+  await send(first)
+  // Also populate the cooldown map so timer cleanup covers both resource types.
+  await send(event('slash', 'izaro'))
+  for (let i = 1; i < 1000; i++) await send(event('button', 'settings:disconnect'))
+  const overflow = event('button', 'settings:disconnect')
+  await send(overflow)
+  expect(overflow.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('bot is busy') }),
+  )
+  await vi.advanceTimersByTimeAsync(11 * 60_000)
+  const stale = event('button', controlId(first))
+  await send(stale)
+  expect(stale.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('expired') }),
+  )
+  const fresh = event('button', 'settings:disconnect')
+  await send(fresh)
+  await send(event('button', controlId(fresh)))
+  expect(store.disconnect).toHaveBeenCalledExactlyOnceWith('123', 'user')
+})
+
+it('reports a successful save even if recording completion fails', async () => {
+  transport.mockResolvedValue(new Response(JSON.stringify(quote)))
+  vi.mocked(store.complete).mockRejectedValue(new Error('database offline'))
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const e = manual()
+  await send(e)
+  expect(store.complete).toHaveBeenCalledWith('invocation', quote.id)
+  expect(e.editReply).toHaveBeenCalledWith(expect.objectContaining({ embeds: expect.any(Array) }))
+  expect(log).toHaveBeenCalledWith('Could not record completed quote invocation')
+  expect(transport).toHaveBeenCalledTimes(1)
+})
+
+it.each([{ guildId: 'other' }, { author: { id: 'bot' } }, { inGuild: () => false }])(
+  'rejects capture of a message outside its allowed source: %j',
+  async (overrides) => {
+    const e = event('context', 'Save quote', {
+      targetMessage: { fetch: async () => sourceMessage(overrides) },
+    })
+    await send(e)
+    expect(e.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('cannot be saved') }),
+    )
+    expect(store.claim).not.toHaveBeenCalled()
+  },
+)
+
+it('requires permission to read the original message history', async () => {
+  const e = event('context', 'Save quote', {
+    targetMessage: {
+      fetch: async () =>
+        sourceMessage({ channel: { permissionsFor: () => ({ has: () => false }) } }),
+    },
+  })
+  await send(e)
+  expect(e.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('not accessible') }),
+  )
+  expect(store.claim).not.toHaveBeenCalled()
+})
+
+it('resolves mentions without pinging anyone and falls back when members have left', async () => {
+  transport.mockResolvedValue(new Response(JSON.stringify(quote)))
+  guild.members.fetch.mockImplementation(async (id?: unknown) => {
+    if (typeof id === 'object' || id === '1') return member
+    throw new Error('Unknown member')
+  })
+  guild.channels.cache.set('3', { name: 'general' })
+  guild.roles.cache.set('4', { name: 'Readers' })
+  const source = sourceMessage({
+    content: '<@1> <@!1> <@2> <@5> <#3> <#6> <@&4> <@&7>',
+    mentions: { users: new Map([['2', { username: 'Former member' }]]) },
+  })
+  const e = event('context', 'Save quote', { targetMessage: { fetch: async () => source } })
+  await send(e)
+  expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toMatchObject({
+    quote: '@Server Nick @Server Nick @Former member @user-5 #general #channel-6 @Readers @role-7',
+    author: 'Original',
+  })
+  expect(guild.members.fetch.mock.calls.filter(([id]) => id === '1')).toHaveLength(1)
+  guild.channels.cache.clear()
+  guild.roles.cache.clear()
+})
+
+it('shows current connection and policy settings without exposing the credential', async () => {
+  administrator = true
+  settings.creator_roles = { mode: 'selected', ids: ['role-a'] }
+  settings.channels = { mode: 'selected', ids: [] }
+  const e = event('slash', 'settings')
+  await send(e)
+  expect(e.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({
+      content: expect.stringContaining('Creator roles: role-a\nChannels: none'),
+    }),
+  )
+  expect(JSON.stringify(e.editReply.mock.calls)).not.toContain('quotedb-secret')
+})
+
+it.each(['roles', 'channels'])(
+  'requires confirmation before saving selected %s',
+  async (action) => {
+    administrator = true
+    const e = event('button', `settings:${action}`)
+    await send(e)
+    expect(controlId(e)).toBe(action === 'roles' ? 'select:creator_roles' : 'select:channels')
+    const selected = event('button', controlId(e), {
+      isButton: () => false,
+      isRoleSelectMenu: () => action === 'roles',
+      isChannelSelectMenu: () => action === 'channels',
+      values: ['selected-id'],
+    })
+    await send(selected)
+    expect(store.policy).not.toHaveBeenCalled()
+    await send(event('button', controlId(selected)))
+    expect(store.policy).toHaveBeenCalledWith(
+      '123',
+      'user',
+      action === 'roles' ? 'creator_roles' : 'channels',
+      { mode: 'selected', ids: ['selected-id'] },
+    )
+  },
+)
+
+it('rejects personal credentials at setup', async () => {
+  administrator = true
+  transport.mockResolvedValue(new Response(JSON.stringify({ ...tokenInfo, kind: 'personal' })))
+  const e = event('modal', 'setup', { fields: { getTextInputValue: () => 'candidate-secret' } })
+  await send(e)
+  expect(e.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: expect.stringContaining('collection integration token') }),
+  )
+  expect(store.connect).not.toHaveBeenCalled()
+})
+
+it.each(['kind', 'scopes', 'revision'])(
+  'rechecks %s before confirming a connection',
+  async (failure) => {
+    administrator = true
+    transport.mockImplementation(async () => new Response(JSON.stringify(tokenInfo)))
+    const e = event('modal', 'setup', { fields: { getTextInputValue: () => 'candidate-secret' } })
+    await send(e)
+    if (failure === 'kind')
+      transport.mockImplementation(
+        async () => new Response(JSON.stringify({ ...tokenInfo, kind: 'personal' })),
+      )
+    if (failure === 'scopes')
+      transport.mockImplementation(
+        async () => new Response(JSON.stringify({ ...tokenInfo, scopes: [] })),
+      )
+    if (failure === 'revision') vi.mocked(store.connect).mockResolvedValue(false)
+    const confirm = event('button', controlId(e))
+    await send(confirm)
+    expect(confirm.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          failure === 'kind'
+            ? 'collection integration token'
+            : failure === 'scopes'
+              ? 'required scopes'
+              : 'Settings changed',
+        ),
+      }),
+    )
+    if (failure !== 'revision') expect(store.connect).not.toHaveBeenCalled()
+  },
+)
+
+it('does not treat pagination controls as settings confirmations', async () => {
+  administrator = true
+  const e = event('slash', 'list')
+  await send(e)
+  const forged = event('button', `confirm:${controlId(e).split(':')[1]}`)
+  await send(forged)
+  expect(forged.editReply).toHaveBeenCalledWith(
+    expect.objectContaining({ content: 'Invalid control.' }),
+  )
+  expect(store.connect).not.toHaveBeenCalled()
+  expect(store.policy).not.toHaveBeenCalled()
+})
+
+it('absorbs failures when Discord cannot deliver an error response', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const e = event('slash', 'random', {
+    guildId: 'outside',
+    editReply: vi.fn().mockRejectedValue(new Error('deleted interaction')),
+  })
+  await expect(send(e)).resolves.toBeUndefined()
+  expect(log).toHaveBeenCalledWith('Could not deliver interaction error')
+})
+
+it.each(['missing-reference', 'inaccessible-reference', 'failed-reply'])(
+  'handles message capture failure: %s',
+  async (failure) => {
+    const message = mentioningMessage(
+      failure === 'missing-reference'
+        ? { reference: null }
+        : {
+            fetchReference: vi.fn().mockRejectedValue(new Error('Unknown message')),
+            ...(failure === 'failed-reply'
+              ? { reply: vi.fn().mockRejectedValue(new Error('Missing access')) }
+              : {}),
+          },
+    )
+    await expect(bot.message(message as unknown as Message)).resolves.toBeUndefined()
+    expect(message.reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          failure === 'missing-reference' ? 'Reply to a message' : 'could not be found',
+        ),
+        allowedMentions: { parse: [], repliedUser: false },
+      }),
+    )
+    expect(store.claim).not.toHaveBeenCalled()
+  },
+)
+
+it('fetches its own membership when the cache is empty and supports thread replies', async () => {
+  guild.members.me = null
+  vi.spyOn(channel, 'isThread').mockReturnValue(true)
+  const e = event('slash', 'random')
+  await send(e)
+  expect(guild.members.fetchMe).toHaveBeenCalled()
+  expect(e.editReply).toHaveBeenCalledWith(expect.objectContaining({ embeds: expect.any(Array) }))
+})
+
+it.each([
+  ['   ', 'Author', 'must not be empty'],
+  ['Text', '   ', 'must not be empty'],
+  ['x'.repeat(5001), 'Author', 'up to 5,000'],
+  ['Text', 'x'.repeat(256), 'up to 5,000'],
+])(
+  'rejects invalid manual quote input before claiming a write: %s',
+  async (text, author, error) => {
+    const e = event('modal', 'create', {
+      fields: {
+        getTextInputValue: (name: string) =>
+          name === 'date' ? '' : name === 'quote' ? text : author,
+      },
+    })
+    await send(e)
+    expect(e.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining(error) }),
+    )
+    expect(store.claim).not.toHaveBeenCalled()
+    expect(transport).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  { author: { bot: true, id: 'other-bot' } },
+  { guildId: null },
+  { guildId: 'outside' },
+  { mentions: { users: new Map() } },
+])('ignores messages that are not eligible capture requests: %j', async (overrides) => {
+  const message = mentioningMessage(overrides)
+  await bot.message(message as unknown as Message)
+  expect(message.reply).not.toHaveBeenCalled()
   expect(store.get).not.toHaveBeenCalled()
   expect(transport).not.toHaveBeenCalled()
 })

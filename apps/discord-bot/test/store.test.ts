@@ -51,3 +51,20 @@ it('persists settings and uses compare-and-swap for connection updates', async (
   expect((await store.get('1')).credential).toBeNull()
   expect((await store.get('1')).creator_roles.mode).toBe('selected')
 })
+
+it('records completed invocations durably and checks database connectivity', async () => {
+  await store.health()
+  expect(await store.claim('completion-guild', 'completion-event')).toBe(true)
+  const quoteId = '00000000-0000-4000-8000-000000000002'
+  await store.complete('completion-event', quoteId)
+  const sql = postgres(container.getConnectionUri(), { onnotice: () => {} })
+  try {
+    expect(
+      (await sql`select quote_id from discord_bot.invocations where id='completion-event'`)[0]
+        ?.quote_id,
+    ).toBe(quoteId)
+    expect(await store.claim('completion-guild', 'completion-event')).toBe(false)
+  } finally {
+    await sql.end()
+  }
+})
