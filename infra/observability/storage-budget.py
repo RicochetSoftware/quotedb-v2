@@ -8,7 +8,7 @@ db = sqlite3.connect(':memory:')
 for migration in sorted((root / 'apps/status/migrations').glob('*.sql')):
     db.executescript(migration.read_text())
 components = ['web', 'admin', 'bot', 'api', 'site']
-db.executemany('INSERT INTO check_results VALUES(?,?,?,?,?,?)',
+db.executemany('INSERT INTO check_samples VALUES(?,?,?,?,?,?)',
     ((component, bucket, 1793500000000 + bucket * 60000, 345.12, 'healthy', None)
      for bucket in range(14 * 1440) for component in components))
 db.executemany('INSERT INTO evaluations VALUES(?,?,?)',

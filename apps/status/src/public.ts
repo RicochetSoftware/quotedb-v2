@@ -21,7 +21,9 @@ export async function status(env: Env, now: number) {
     | { started_at: number; updated_at: number; data: string }
     | undefined
   const history = JSON.parse(summary?.data ?? '{}')
-  const stale = states.length !== 5 || states.some((state) => now - state.at > 180000)
+  const stale =
+    states.length !== 5 ||
+    states.some((state) => now - state.at > 180000 || state.observation.reason === 'probe_stale')
   return {
     generatedAt: now,
     stale,
@@ -72,9 +74,9 @@ export async function readSnapshot(env: Env, now: number) {
     }
   const data = JSON.parse(row.data) as Awaited<ReturnType<typeof status>>
   data.generatedAt = now
-  data.stale = data.components.some(
-    (component) => !component.lastCheck || now - component.lastCheck > 180000,
-  )
+  data.stale =
+    data.stale ||
+    data.components.some((component) => !component.lastCheck || now - component.lastCheck > 180000)
   for (const component of data.components)
     if (!component.lastCheck || now - component.lastCheck > 180000) component.status = 'unknown'
   return data

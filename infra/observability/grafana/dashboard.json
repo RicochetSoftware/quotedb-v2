@@ -97,10 +97,15 @@
             "fields": "",
             "values": false
           },
-          "orientation": "horizontal",
+          "orientation": "auto",
           "colorMode": "value",
           "graphMode": "none",
-          "textMode": "value_and_name"
+          "textMode": "value_and_name",
+          "wideLayout": false,
+          "text": {
+            "titleSize": 16,
+            "valueSize": 24
+          }
         }
       },
       {
@@ -345,7 +350,9 @@
               "lineInterpolation": "linear",
               "fillOpacity": 8,
               "showPoints": "never"
-            }
+            },
+            "min": 0,
+            "max": 1
           },
           "overrides": []
         },

@@ -44,6 +44,12 @@ jobs:
           pnpm exec wrangler deploy --config wrangler.public.generated.json
           pnpm exec wrangler deploy --config wrangler.maintenance.generated.json
           pnpm exec wrangler deploy --config wrangler.exporter.generated.json
+      - name: Preserve samples across the compact-table cutover
+        working-directory: apps/status
+        run: >-
+          pnpm exec wrangler d1 execute quotedb-status --remote
+          --config wrangler.monitor.generated.json
+          --command "INSERT OR IGNORE INTO check_samples SELECT * FROM check_results WHERE observed_at >= unixepoch()*1000-1209600000"
       - name: Verify status freshness
         run: |
           for attempt in $(seq 1 20); do

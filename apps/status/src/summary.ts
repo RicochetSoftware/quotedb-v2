@@ -14,7 +14,7 @@ export async function summarize(env: Env, now: number) {
   const marker = await env.DB.prepare(
     'SELECT started_at,updated_at FROM summary WHERE id=1',
   ).first<{ started_at: number; updated_at: number }>()
-  if (!marker || now - marker.updated_at < 900000) return
+  if (!marker || (marker.updated_at !== 0 && now - marker.updated_at < 1800000)) return
   const [days, checks, latest] = await env.DB.batch([
     env.DB.prepare('SELECT * FROM daily_rollups WHERE day>=?').bind(
       Math.floor(now / DAY) * DAY - 89 * DAY,
@@ -22,7 +22,7 @@ export async function summarize(env: Env, now: number) {
     env.DB.prepare(`WITH ordered AS (
       SELECT component,outcome,observed_at,
         LEAD(observed_at,1,?) OVER(PARTITION BY component ORDER BY observed_at) AS next_at
-      FROM check_results WHERE observed_at>=?
+      FROM check_samples WHERE observed_at>=?
     ), spans AS (
       SELECT component,outcome,MAX(0,MIN(next_at,observed_at+180000,?)-MAX(observed_at,?))/1000.0 AS seconds FROM ordered
     ) SELECT component,

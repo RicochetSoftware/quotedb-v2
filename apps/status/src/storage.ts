@@ -86,7 +86,7 @@ export async function commit(
   }
   // JSON table expansion keeps the D1 binding/response overhead bounded to three writes.
   statements.push(
-    env.DB.prepare(`INSERT INTO check_results
+    env.DB.prepare(`INSERT INTO check_samples
       SELECT json_extract(value,'$.component'),?,json_extract(value,'$.at'),
         json_extract(value,'$.observation.duration'),json_extract(value,'$.observation.outcome'),
         json_extract(value,'$.observation.reason') FROM json_each(?) WHERE ${guard}`).bind(
@@ -161,6 +161,9 @@ export async function prune(env: Env, now: number) {
   await env.DB.batch([
     env.DB.prepare(
       'DELETE FROM check_results WHERE rowid IN (SELECT rowid FROM check_results WHERE observed_at<? LIMIT 100)',
+    ).bind(now - 14 * DAY),
+    env.DB.prepare(
+      'DELETE FROM check_samples WHERE (component,bucket) IN (SELECT component,bucket FROM check_samples WHERE observed_at<? LIMIT 100)',
     ).bind(now - 14 * DAY),
     env.DB.prepare(
       'DELETE FROM evaluations WHERE bucket IN (SELECT bucket FROM evaluations WHERE bucket<? LIMIT 20)',

@@ -67,7 +67,7 @@ describe('D1 transactional lifecycle', () => {
     const first = [observation('failed', 60000)]
     await commit(e, 1, first, [])
     await commit(e, 1, first, [])
-    expect((await e.DB.prepare('SELECT * FROM check_results').all()).results).toHaveLength(1)
+    expect((await e.DB.prepare('SELECT * FROM check_samples').all()).results).toHaveLength(1)
     await commit(e, 2, [observation('failed', 120000)], await loadStates(e))
     expect((await e.DB.prepare('SELECT * FROM incidents').all()).results).toHaveLength(1)
     expect((await commit(e, 3, [observation('healthy', 180000)], [])).committed).toBe(false)
@@ -248,4 +248,5 @@ it('does not reuse distributed probes and makes stopped probe workers unknown', 
   expect((await loadStates(e)).find((s) => s.component === 'api')?.healthy).toBe(1)
   await evaluate(e, base + 120000)
   expect((await loadStates(e)).find((s) => s.component === 'api')?.status).toBe('unknown')
+  expect((await status(e, base + 120000)).stale).toBe(true)
 })

@@ -22,7 +22,7 @@ Wrangler owns Worker code, D1 bindings and schedules. There are six entrypoints:
 - `quotedb-monitor`: one-minute state evaluations, authenticated heartbeat/operator
   ingestion. No public route; only the public Worker's service binding reaches it.
 - `quotedb-status-maintenance`: its own one-minute cron for public snapshots,
-  15-minute history summaries and retention. It has no
+  30-minute history summaries and retention. It has no
   public route. A service binding does **not** provide an independent top-level CPU
   allowance; this separate cron keeps cleanup/export out of the check invocation.
 - `quotedb-status`: static assets plus a sanitized API reading one snapshot row.
@@ -160,7 +160,7 @@ end at the next observation, capped at 180 seconds and split at UTC midnight.
 Successful slow time is available and separately degraded. Unknown/maintenance
 are excluded from the denominator with coverage shown. There is no fabricated
 pre-monitoring history. 24 hours is rolling; 30/90 days are UTC calendar windows
-including today. History summaries update every 15 minutes; daily totals include
+including today. History summaries update every 30 minutes; daily totals include
 bounded current observations. Public snapshots update independently each minute.
 
 D1 batches compare the previous generation and reject duplicate/older evaluations.
@@ -181,17 +181,25 @@ tabs pause polling. Keep below roughly 30 continuously visible pages/account at
 these frequencies and monitor actual usage before approaching 100,000/day.
 
 Steady-state estimates, including raw retention deletes and secondary indexes:
-roughly 85–98k row writes/day, under 2m reads/day plus one row/public read. These
+roughly 79–85k row writes/day, under 3m reads/day plus one row/public read. Steady-state evaluation measured 25 writes and 41 reads in remote D1; a
+7,200-sample rolling summary measured 43,446 reads, so summaries run every
+30 minutes (about 2.1m reads/day). The compact raw table avoids duplicate
+primary-key B-tree writes. The original raw table remains for rollback and
+is pruned on its original 14-day schedule. These
 are estimates, **not** a quota guarantee; sustained incident churn increases
-writes. Target warning thresholds: 80k writes, 4m reads, 80k requests, 400 MB D1.
-`storage-budget.py` measured about 9.33 MiB for 14-day raw checks/evaluations plus
+writes. Target warning thresholds: 85k writes, 4m reads, 80k requests, 400 MB D1.
+`storage-budget.py` measured about 8.30 MiB for 14-day raw checks/evaluations plus
 400-day rollups with indexes. Reserve 50 MiB for real history, notes and overhead.
+`check-cloudflare-budget.py` checks shared daily D1/Worker usage and database size
+in every independent GitHub ops-check run, failing before hard allowances. Analytics
+can lag ingestion; it is an early warning rather than a quota reservation.
 `profile-workers.py` records actual CPU/request evidence; Free CPU must remain below
 10,000 microseconds per top-level invocation. Review again after one week of load.
 
 Initial host baseline was ~390 MiB available. With collection, Alloy used ~63 MiB
 and ~0.34% sampled CPU; host available memory was ~383 MiB. Recheck over normal load;
-these are point observations, not peak guarantees. Keep the 128 MiB cap and avoid
+these are point observations, not peak guarantees. Later collection remained within
+the cap but approached it during restart; monitor the container-memory panel. Keep the 128 MiB cap and avoid
 adding container discovery, logs or traces until headroom is measured again.
 
 Validation includes reducer and SQLite/D1 transaction tests, authentication and
@@ -226,3 +234,7 @@ Worker. Keep additive migrations; rollback must not drop data. Roll back applica
 images separately with the existing deployment workflow. On collector pressure,
 stop Alloy (`docker compose stop alloy`); API/bot requests and D1 monitoring continue.
 Before removing infrastructure, export D1 and disable its cron jobs explicitly.
+
+The selected Grafana stack was on its existing Free Trial during setup. No paid
+upgrade was made. Confirm its post-trial Free retention and active-series allowance
+in the account portal during the one-week review.

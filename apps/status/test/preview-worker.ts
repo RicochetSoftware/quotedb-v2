@@ -31,9 +31,32 @@ export default {
           JSON.stringify({ ready: !failed, api: !failed, db: true, discord: true, latency: 20 }),
         )
         .run()
-      await evaluate(targets, at)
+      const usage = { reads: 0, writes: 0 }
+      const measured = {
+        ...targets,
+        OTLP_URL: 'https://example.invalid/disabled-preview-export',
+        DB: new Proxy(env.DB, {
+          get(db, property) {
+            if (property === 'batch')
+              return async (statements: D1PreparedStatement[]) => {
+                const results = await db.batch(statements)
+                for (const result of results) {
+                  usage.reads += result.meta.rows_read
+                  usage.writes += result.meta.rows_written
+                }
+                return results
+              }
+            const value = Reflect.get(db, property)
+            return typeof value === 'function' ? value.bind(db) : value
+          },
+        }),
+      }
+      await evaluate(measured, at)
       await publishSnapshot(env, at)
-      return new Response(null, { status: 204 })
+      return new Response(null, {
+        status: 204,
+        headers: { 'X-D1-Reads': String(usage.reads), 'X-D1-Writes': String(usage.writes) },
+      })
     }
     if (url.pathname.startsWith('/failed')) return new Response('Unavailable', { status: 503 })
     if (url.pathname === '/asset.css')

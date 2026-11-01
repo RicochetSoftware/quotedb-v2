@@ -43,14 +43,18 @@ async function get(
   const response = await fetch(url, {
     signal,
     redirect: 'manual',
-    headers: { 'Cache-Control': 'no-cache', ...headers },
+    headers: {
+      'Cache-Control': 'no-cache',
+      ...(prefix ? { Range: 'bytes=0-511', 'Accept-Encoding': 'identity' } : {}),
+      ...headers,
+    },
     cache: 'no-store',
   })
-  if (response.status !== 200) {
+  if (response.status !== 200 && !(prefix && response.status === 206)) {
     await response.body?.cancel()
     throw new Error('http_status')
   }
-  return boundedText(response, prefix ? 4096 : 262144, prefix)
+  return boundedText(response, prefix ? 512 : 262144, prefix)
 }
 async function shell(url: string, signal: AbortSignal) {
   const html = await get(url, signal)

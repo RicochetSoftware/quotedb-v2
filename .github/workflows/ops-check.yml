@@ -12,6 +12,17 @@ permissions:
   contents: read
 
 jobs:
+  cloudflare-budget:
+    if: vars.STATUS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check shared Free allowances
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          STATUS_DATABASE_ID: ${{ vars.STATUS_DATABASE_ID }}
+        run: python3 infra/observability/check-cloudflare-budget.py
   uptime:
     runs-on: ubuntu-latest
     steps:

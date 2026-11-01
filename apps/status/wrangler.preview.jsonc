@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "quotedb-status-preview",
+  "main": "test/preview-worker.ts",
+  "compatibility_date": "2026-10-31",
+  "workers_dev": true,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quotedb-status-preview",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "services": [],
+  "vars": {
+    "HTTP_LATENCY_MS": "1500",
+    "BOT_LATENCY_MS": "500"
+  },
+  "compatibility_flags": ["global_fetch_strictly_public"]
+}
