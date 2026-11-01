@@ -1,0 +1,43 @@
+version: 2
+
+updates:
+  # One job covers every package in the shared pnpm workspace and lockfile.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Helsinki
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # Keep related workspace packages together; review majors individually.
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      # dependencies.yml submits an SBOM for alerts because GitHub cannot parse
+      # pnpm 12's two-document lockfile. Security-fix PRs still depend on updater
+      # support; this group applies when GitHub can generate those PRs.
+      # https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories#pnpm
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/tofu-init
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Helsinki
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
