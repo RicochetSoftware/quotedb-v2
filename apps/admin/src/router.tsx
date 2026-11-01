@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router'
 import { meQuery, queryClient } from './api'
 import { AdminLayout, NotFound } from './components/layout'
+import { CollectionsPage } from './routes/collections'
 import { DashboardPage } from './routes/dashboard'
 import { ForbiddenPage } from './routes/forbidden'
 import { LoginPage } from './routes/login'
@@ -103,6 +104,17 @@ const userDetailRoute = createRoute({
   component: UserDetailPage,
 })
 
+const collectionsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/collections',
+  validateSearch: (s): { q?: string; kind?: 'personal' | 'shared' } =>
+    compact({
+      q: str(s.q),
+      kind: s.kind === 'personal' || s.kind === 'shared' ? s.kind : undefined,
+    }),
+  component: CollectionsPage,
+})
+
 export interface QuotesSearch {
   user_id?: string
   collection_id?: string
@@ -145,6 +157,7 @@ const routeTree = rootRoute.addChildren([
     usersRoute,
     userNewRoute,
     userDetailRoute,
+    collectionsRoute,
     quotesRoute,
     quoteDetailRoute,
   ]),

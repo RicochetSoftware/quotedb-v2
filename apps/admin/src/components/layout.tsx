@@ -1,7 +1,7 @@
 import { Button, NativeSelect, ThemeToggle, toast } from '@quotedb/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
-import { LayoutDashboardIcon, QuoteIcon, ShieldIcon, UsersIcon } from 'lucide-react'
+import { FolderOpenIcon, LayoutDashboardIcon, QuoteIcon, ShieldIcon, UsersIcon } from 'lucide-react'
 import { useId } from 'react'
 import { api, errorMessage, meQuery, WEB_URL } from '../api'
 
@@ -36,6 +36,9 @@ export function AdminLayout() {
           </Link>
           <Link to="/users" className={link} activeProps={active}>
             <UsersIcon /> Users
+          </Link>
+          <Link to="/collections" className={link} activeProps={active}>
+            <FolderOpenIcon /> Collections
           </Link>
           <Link to="/quotes" className={link} activeProps={active}>
             <QuoteIcon /> Quotes

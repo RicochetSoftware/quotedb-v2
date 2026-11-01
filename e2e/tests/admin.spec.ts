@@ -11,6 +11,16 @@ test('admin: log in, see the dashboard, edit a user', async ({ page }) => {
   await expect(page.getByTestId('stat-Users')).toHaveText('2')
   await page.screenshot({ path: 'test-results/admin-dashboard.png', fullPage: true })
 
+  await page.getByRole('link', { name: 'Collections', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Collections', exact: true })).toBeVisible()
+  await page.getByLabel('Search collections').fill(ADMIN.name)
+  await page.getByLabel('Collection type').selectOption('personal')
+  await page.reload()
+  await expect(page.getByLabel('Search collections')).toHaveValue(ADMIN.name)
+  await page.getByRole('link', { name: `View quotes in ${ADMIN.name}'s quotes` }).click()
+  await expect(page).toHaveURL(/collection_id=/)
+  await expect(page.getByRole('heading', { name: 'Quotes', exact: true })).toBeVisible()
+
   await page.getByRole('link', { name: 'Users' }).click()
   await page.getByLabel('Rows per page').selectOption('100')
   await expect(page).toHaveURL(/page_size=100/)
