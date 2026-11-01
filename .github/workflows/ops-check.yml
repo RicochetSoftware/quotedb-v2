@@ -15,6 +15,13 @@ jobs:
   uptime:
     runs-on: ubuntu-latest
     steps:
+      - name: Independent status and scheduler freshness
+        if: vars.STATUS_ENABLED == 'true'
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: |
+          curl -fsS --max-time 10 "https://status.$DOMAIN/api/status" > "$RUNNER_TEMP/status.json"
+          jq -e '(.stale == false) and (.components | length == 5) and all(.components[]; (.lastCheck / 1000) > (now - 180))' "$RUNNER_TEMP/status.json"
       - name: API health
         run: |
           for _ in 1 2 3; do

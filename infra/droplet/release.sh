@@ -12,6 +12,22 @@ install -m 600 "$stage/postgres.env" postgres.env
 install -m 600 "$stage/.env" .env
 install -m 640 "$stage/compose.yaml" compose.yaml
 install -m 640 "$stage/compose.bot.yaml" compose.bot.yaml
+install -m 640 "$stage/compose.observability.yaml" compose.observability.yaml
+install -m 644 "$stage/config.alloy" config.alloy
+if [[ -f "$stage/observability.env" ]]; then install -m 600 "$stage/observability.env" observability.env; fi
+# Preserve an enabled collector across ordinary application releases.
+if [[ -f observability.env ]]; then
+  sudo install -d -m 755 /var/lib/quotedb-metrics
+  sudo install -m 750 "$stage/container-metrics.sh" /opt/quotedb/container-metrics.sh
+  sudo install -m 644 "$stage/quotedb-container-metrics.service" "$stage/quotedb-container-metrics.timer" /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now quotedb-container-metrics.timer
+  if [[ -f "$stage/bot.env" ]]; then
+    printf "COMPOSE_FILE='compose.yaml:compose.bot.yaml:compose.observability.yaml'\n" >> .env
+  else
+    printf "COMPOSE_FILE='compose.yaml:compose.observability.yaml'\n" >> .env
+  fi
+fi
 if [[ -f "$stage/bot.env" ]]; then install -m 600 "$stage/bot.env" bot.env; fi
 install -m 750 "$stage/backup.sh" backup.sh
 # Registry credentials are private to this release and removed with staging.

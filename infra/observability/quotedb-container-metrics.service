@@ -1,0 +1,5 @@
+[Unit]
+Description=QuoteDB bounded container metrics
+[Service]
+Type=oneshot
+ExecStart=/opt/quotedb/container-metrics.sh

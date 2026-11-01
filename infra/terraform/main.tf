@@ -38,6 +38,12 @@ module "backend" {
       CF_ACCESS_TEAM   = var.access_team
       CF_ACCESS_AUD    = cloudflare_zero_trust_access_application.admin.aud
     },
+    var.status_monitoring_enabled ? {
+      ADMIN_MONITOR_AUD       = cloudflare_zero_trust_access_application.monitor[0].aud
+      ADMIN_MONITOR_CLIENT_ID = cloudflare_zero_trust_access_service_token.monitor[0].client_id
+      ADMIN_MONITOR_SECRET    = random_password.monitor["origin"].result
+      METRICS_ENABLED         = "true"
+    } : {},
     var.izaro_user_id == "" ? {} : { IZARO_USER_ID = var.izaro_user_id },
     var.izaro_collection_id == "" ? {} : { IZARO_COLLECTION_ID = var.izaro_collection_id },
   )

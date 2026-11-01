@@ -26,6 +26,7 @@ import {
 } from 'discord.js'
 import type { Policy, Settings, Store } from './db/store.js'
 import type { Env } from './env.js'
+import { commands } from './metrics.js'
 import { channelAllowed, creatorAllowed, UserError } from './policies.js'
 import { type DisplayQuote, renderQuotes } from './presentation/quotes.js'
 import { decrypt, encrypt } from './security/credentials.js'
@@ -644,6 +645,15 @@ export function createBot(client: Client, env: Env, store: Store) {
   return {
     async interaction(interaction: Interaction) {
       if (!interaction.isRepliable()) return
+      const start = performance.now()
+      const kind = interaction.isChatInputCommand()
+        ? 'slash'
+        : interaction.isButton()
+          ? 'button'
+          : interaction.isModalSubmit()
+            ? 'modal'
+            : 'context'
+      let outcome = 'success'
       try {
         await handle(interaction)
       } catch (error) {
@@ -660,6 +670,7 @@ export function createBot(client: Client, env: Env, store: Store) {
                   : 'internal',
           }),
         )
+        outcome = error instanceof UserError ? 'user_error' : 'error'
         const content = userMessage(error)
         try {
           if (
@@ -674,6 +685,8 @@ export function createBot(client: Client, env: Env, store: Store) {
         } catch {
           console.error('Could not deliver interaction error')
         }
+      } finally {
+        commands.observe({ kind, outcome }, (performance.now() - start) / 1000)
       }
     },
     async message(message: Message) {

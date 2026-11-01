@@ -32,3 +32,8 @@ backend.hcl
 # Deployment TLS material
 admin-origin.crt
 admin-origin.key
+
+# Local Cloudflare state and generated deployment config
+.wrangler/
+.dev.vars*
+apps/status/*.generated.json

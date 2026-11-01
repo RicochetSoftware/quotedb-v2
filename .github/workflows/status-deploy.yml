@@ -1,0 +1,57 @@
+name: Status deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ["apps/status/**", ".github/workflows/status-deploy.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: status-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: vars.STATUS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      STATUS_DATABASE_ID: ${{ vars.STATUS_DATABASE_ID }}
+      ADMIN_HOST: ${{ vars.ADMIN_HOST || secrets.ADMIN_HOST }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @quotedb/status typecheck
+      - run: pnpm --filter @quotedb/status test
+      - run: pnpm --filter @quotedb/status build
+      - run: node scripts/configure.mjs
+        working-directory: apps/status
+      - name: Additive database migrations
+        working-directory: apps/status
+        run: pnpm exec wrangler d1 migrations apply quotedb-status --remote --config wrangler.monitor.generated.json
+      - name: Deploy monitoring and public workers
+        working-directory: apps/status
+        run: |
+          pnpm exec wrangler deploy --config wrangler.frontend.generated.json
+          pnpm exec wrangler deploy --config wrangler.backend.generated.json
+          pnpm exec wrangler deploy --config wrangler.monitor.generated.json
+          pnpm exec wrangler deploy --config wrangler.public.generated.json
+          pnpm exec wrangler deploy --config wrangler.maintenance.generated.json
+          pnpm exec wrangler deploy --config wrangler.exporter.generated.json
+      - name: Verify status freshness
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl -fsS --max-time 10 https://status.${{ vars.DOMAIN }}/api/status |
+              jq -e '.stale == false and (.components | length == 5)'; then
+              exit 0
+            fi
+            sleep 60
+          done
+          echo 'Status did not become fresh within the cron propagation window'
+          exit 1

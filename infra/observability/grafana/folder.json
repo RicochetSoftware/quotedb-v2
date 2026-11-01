@@ -1,0 +1,11 @@
+{
+  "apiVersion": "folder.grafana.app/v1",
+  "kind": "Folder",
+  "metadata": {
+    "name": "quotedb"
+  },
+  "spec": {
+    "title": "QuoteDB",
+    "description": "QuoteDB service and infrastructure performance"
+  }
+}

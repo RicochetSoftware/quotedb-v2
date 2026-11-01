@@ -119,7 +119,7 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
         return user
       },
       async adminAssertion(email, claims = {}) {
-        return new SignJWT({ email })
+        return new SignJWT({ ...claims, email })
           .setProtectedHeader({ alg: 'RS256' })
           .setIssuer(String(claims.iss ?? 'http://quotedb.local/access'))
           .setAudience(String(claims.aud ?? 'test-admin'))

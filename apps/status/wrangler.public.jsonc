@@ -1,0 +1,27 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "quotedb-status",
+  "main": "src/public.ts",
+  "compatibility_date": "2026-10-31",
+  "workers_dev": true,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quotedb-status",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "services": [
+    {
+      "binding": "MONITOR",
+      "service": "quotedb-monitor"
+    }
+  ],
+  "preview_urls": false,
+  "minify": true
+}

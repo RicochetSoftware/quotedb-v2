@@ -33,6 +33,9 @@ export const EnvSchema = Type.Object({
   AUTH_CODE_SECRET: Type.Optional(Type.String({ minLength: 32 })),
   AUTH_EMAIL_HOURLY_LIMIT: Type.Integer({ minimum: 1, default: 1000 }),
   CF_ACCESS_TEAM: Type.Optional(Type.String({ pattern: '^[a-z0-9-]+$' })),
+  ADMIN_MONITOR_AUD: Type.Optional(Type.String()),
+  ADMIN_MONITOR_CLIENT_ID: Type.Optional(Type.String()),
+  ADMIN_MONITOR_SECRET: Type.Optional(Type.String({ minLength: 32 })),
   CF_ACCESS_AUD: Type.Optional(Type.String({ minLength: 1 })),
   // Explicit local signed-token setup only; never accepted in production.
   ADMIN_DEV_PUBLIC_KEY: Type.Optional(Type.String()),
@@ -59,6 +62,9 @@ export interface Env {
   AUTH_CODE_SECRET: string
   AUTH_EMAIL_HOURLY_LIMIT: number
   CF_ACCESS_TEAM: string | undefined
+  ADMIN_MONITOR_AUD?: string
+  ADMIN_MONITOR_CLIENT_ID?: string
+  ADMIN_MONITOR_SECRET?: string
   CF_ACCESS_AUD: string | undefined
   ADMIN_DEV_PUBLIC_KEY: string | undefined
   IZARO_USER_ID: string | undefined

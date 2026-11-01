@@ -40,6 +40,9 @@ admin.{$DOMAIN} {
 	# Validate Access at the origin too, including static pages. A direct-origin
 	# request cannot bypass the Cloudflare login page by supplying only Host.
 	header Cache-Control "private, no-store"
+	handle /_monitor/health {
+		reverse_proxy api:8080
+	}
 	handle /api/v1/admin/* {
 		reverse_proxy api:8080
 	}
@@ -57,4 +60,10 @@ admin.{$DOMAIN} {
 api.{$DOMAIN} {
 	encode zstd gzip
 	reverse_proxy api:8080
+}
+
+# Docker network only; never publish 8091 on the host. Used by authenticated health-only API.
+:8091 {
+  root * /srv/admin
+  file_server
 }

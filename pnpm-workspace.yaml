@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   cpu-features: false
   esbuild: true
+  workerd: true
   protobufjs: false
   ssh2: false
 minimumReleaseAgeExclude:

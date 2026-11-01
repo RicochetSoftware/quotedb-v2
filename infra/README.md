@@ -258,3 +258,13 @@ docker compose -f compose.yaml -f compose.bot.yaml --profile discord run --rm --
 Self-host migration runs before bot startup. Backup/restore and encryption-key rotation
 procedures are in the bot README. Retain a matching encryption key for each retained
 database backup; database dumps alone cannot recover encrypted API credentials.
+
+## Independent status and private metrics
+
+See [the observability runbook](observability/README.md) for the Cloudflare Workers
+and D1 status service at `status.quotes.elmu.dev`, Grafana Cloud, separate deployment,
+credentials, maintenance, budget, backup/restore and rollback procedures. The
+optional `compose.observability.yaml` override runs a capped Alloy collector with
+Docker-only API/bot scraping. It publishes no ports and receives no Docker socket.
+Its secret environment is supplied through `OBSERVABILITY_ENV_FILE` (or the
+`OBSERVABILITY_ENV` GitHub secret). PostgreSQL backups do not cover status history.

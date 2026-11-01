@@ -14,12 +14,14 @@ import type { AppContext } from './context'
 import type { Db } from './db/client'
 import type { Env } from './env'
 import { createSmtpMailer, type Mailer } from './lib/mailer'
+import { instrumentApi } from './metrics'
 import { adminRoutes } from './modules/admin/routes'
 import { authRoutes } from './modules/auth/routes'
 import { collectionRoutes } from './modules/collections/routes'
 import { publicRoutes } from './modules/public/routes'
 import { quoteRoutes } from './modules/quotes/routes'
 import { tokenRoutes } from './modules/tokens/routes'
+import { registerMonitoring } from './monitoring'
 
 export interface BuildAppOptions {
   env: Env
@@ -36,6 +38,8 @@ export async function buildApp(options: BuildAppOptions) {
       level: env.LOG_LEVEL,
       redact: [
         'req.headers.authorization',
+        'req.headers["x-monitor-secret"]',
+        'req.headers["cf-access-client-secret"]',
         'req.headers.cookie',
         'req.headers["cf-access-jwt-assertion"]',
         'res.headers["set-cookie"]',
@@ -43,6 +47,8 @@ export async function buildApp(options: BuildAppOptions) {
     },
     trustProxy: env.TRUST_PROXY,
   }).withTypeProvider<TypeBoxTypeProvider>()
+  const metrics = instrumentApi(app)
+  app.decorate('metrics', metrics)
   app.setValidatorCompiler(TypeBoxValidatorCompiler)
   app.setErrorHandler((error, request, reply) => {
     const status = (error as { statusCode?: number }).statusCode ?? 500
@@ -74,6 +80,7 @@ export async function buildApp(options: BuildAppOptions) {
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   })
   await app.register(cookie, { secret: env.COOKIE_SECRET })
+  await registerMonitoring(app, env)
   await app.register(authPlugin)
   await app.register(rateLimit, {
     // preHandler, so the caller is already resolved: limits apply per token, per user, or per IP.
@@ -113,10 +120,15 @@ export async function buildApp(options: BuildAppOptions) {
   })
   await app.register(swaggerUi, { routePrefix: '/api/documentation' })
 
-  app.get('/healthz', { config: { rateLimit: false }, schema: { hide: true } }, async () => {
-    await db.execute(sql`select 1`)
-    return { ok: true }
-  })
+  app.get(
+    '/healthz',
+    { config: { rateLimit: false }, schema: { hide: true } },
+    async (_request, reply) => {
+      reply.header('cache-control', 'no-store')
+      await db.execute(sql`select 1`)
+      return { ok: true }
+    },
+  )
 
   await app.register(
     async (v1) => {

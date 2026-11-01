@@ -23,6 +23,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm --filter @quotedb/status test
       # API integration tests start a real Postgres 17 via Testcontainers (Docker is on the runner).
       - run: pnpm test:coverage
       - uses: actions/upload-artifact@v7

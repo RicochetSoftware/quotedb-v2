@@ -1,0 +1,73 @@
+{
+  "uid": "quotedb-host-disk",
+  "title": "Droplet disk pressure",
+  "folderUID": "quotedb",
+  "ruleGroup": "QuoteDB operations",
+  "condition": "C",
+  "noDataState": "Alerting",
+  "execErrState": "Alerting",
+  "for": "5m",
+  "isPaused": false,
+  "labels": {
+    "project": "quotedb",
+    "severity": "warning"
+  },
+  "annotations": {
+    "summary": "Disk use above 80%. Check backups, Docker images and the bounded Alloy WAL.",
+    "runbook_url": "https://github.com/RicochetSoftware/quotedb-v2/blob/master/infra/observability/README.md"
+  },
+  "data": [
+    {
+      "refId": "A",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "grafanacloud-prom",
+      "model": {
+        "refId": "A",
+        "expr": "max(1 - node_filesystem_avail_bytes{project=\"quotedb\",fstype=~\"ext4|xfs\"} / node_filesystem_size_bytes{project=\"quotedb\",fstype=~\"ext4|xfs\"}) > bool 0.8",
+        "instant": true,
+        "range": false,
+        "intervalMs": 1000,
+        "maxDataPoints": 43200
+      }
+    },
+    {
+      "refId": "C",
+      "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+          {
+            "evaluator": {
+              "type": "gt",
+              "params": [
+                0
+              ]
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "C"
+              ]
+            },
+            "reducer": {
+              "type": "last",
+              "params": []
+            },
+            "type": "query"
+          }
+        ]
+      }
+    }
+  ]
+}

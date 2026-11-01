@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "quotedb-monitor",
+  "main": "src/monitor.ts",
+  "compatibility_date": "2026-10-31",
+  "workers_dev": false,
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quotedb-status",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "WEB_URL": "https://app.quotes.elmu.dev/",
+    "SITE_URL": "https://quotes.elmu.dev/",
+    "API_URL": "https://api.quotes.elmu.dev",
+    "ADMIN_URL": "https://admin-quotes.elmu.dev/_monitor/health",
+    "HTTP_LATENCY_MS": "1500",
+    "BOT_LATENCY_MS": "500",
+    "DISTRIBUTED_PROBES": "true"
+  },
+  "preview_urls": false,
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "minify": true
+}

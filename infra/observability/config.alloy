@@ -1,0 +1,82 @@
+logging { level = "warn" }
+
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_PROM_USER")
+      password = sys.env("GRAFANA_METRICS_TOKEN")
+    }
+    queue_config {
+      capacity = 2500
+      min_shards = 1
+      max_shards = 2
+      max_samples_per_send = 500
+      batch_send_deadline = "10s"
+    }
+  }
+  wal {
+    truncate_frequency = "1h"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "2h"
+  }
+}
+prometheus.scrape "applications" {
+  targets = [
+    { "__address__" = "api:9091", "service" = "api" },
+    { "__address__" = "discord-bot:9091", "service" = "bot" },
+  ]
+  scrape_interval = "30s"
+  scrape_timeout = "5s"
+  forward_to = [prometheus.relabel.bounded.receiver]
+}
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path = "/host/sys"
+  rootfs_path = "/host/root"
+  set_collectors = ["cpu", "meminfo", "filesystem", "loadavg", "vmstat", "textfile"]
+  textfile { directory = "/var/lib/quotedb-metrics" }
+}
+prometheus.scrape "host" {
+  targets = prometheus.exporter.unix.host.targets
+  scrape_interval = "60s"
+  scrape_timeout = "5s"
+  forward_to = [prometheus.relabel.bounded.receiver]
+}
+prometheus.exporter.postgres "database" {
+  data_source_names = [sys.env("POSTGRES_MONITOR_DSN")]
+}
+prometheus.scrape "database" {
+  targets = prometheus.exporter.postgres.database.targets
+  scrape_interval = "60s"
+  scrape_timeout = "5s"
+  forward_to = [prometheus.relabel.bounded.receiver]
+}
+prometheus.relabel "bounded" {
+  forward_to = [prometheus.remote_write.cloud.receiver]
+  rule {
+    source_labels = ["__name__"]
+    regex = "quotedb_.*|probe_success|up|node_cpu_seconds_total|node_memory_.*|node_filesystem_.*|node_load.*|node_vmstat_pswp.*|pg_stat_database_.*|pg_locks_count|pg_database_size_bytes|pg_up"
+    action = "keep"
+  }
+  rule {
+    target_label = "project"
+    replacement = "quotedb"
+  }
+}
+
+// Independent of Cloudflare execution: check both serving and scheduler freshness.
+prometheus.exporter.blackbox "status" {
+  config = "{modules: {status: {prober: http, timeout: 5s, http: {preferred_ip_protocol: ip4, headers: {User-Agent: QuoteDB-Monitor/1.0}, valid_status_codes: [200], fail_if_body_not_matches_regexp: ['\"stale\":false']}}}}"
+  target {
+    name = "quotedb-status-external"
+    address = "https://status.quotes.elmu.dev/api/status"
+    module = "status"
+  }
+}
+prometheus.scrape "status_external" {
+  targets = prometheus.exporter.blackbox.status.targets
+  scrape_interval = "60s"
+  scrape_timeout = "10s"
+  forward_to = [prometheus.relabel.bounded.receiver]
+}

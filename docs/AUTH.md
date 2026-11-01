@@ -121,3 +121,16 @@ can replay the migration history; the final schema contains no user password sto
 Password-era application releases are no longer compatible with this schema. Rollbacks must
 use a release compatible with the passwordless schema. Existing database backups can retain old
 hashes until their retention period expires; dropping live columns does not erase backups.
+
+## Health-only monitoring exception
+
+`https://<ADMIN_HOST>/_monitor/health` is a separate Access application with an exact
+service-token policy. At the origin, the API verifies its separate audience and
+issuer, the exact service `common_name`, and an additional monitoring secret. It
+returns only `{ok, asset}` readiness. It checks PostgreSQL and the deployed Admin
+shell/asset through Docker-only Caddy port 8091; that port must never be published.
+Anonymous callers, arbitrary service identities and human-audience tokens are
+rejected. The service token cannot authorize `/api/v1/admin/*` or Admin HTML;
+existing human Access JWT and local-role guards are unchanged. This is not an
+end-to-end OTP sign-in test. Operational details are in
+[`infra/observability/README.md`](../infra/observability/README.md).

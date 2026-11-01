@@ -1,0 +1,18 @@
+{
+  "name": "@quotedb/status",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.public.jsonc",
+    "dev:monitor": "wrangler dev --config wrangler.monitor.jsonc",
+    "typecheck": "tsc -b",
+    "build": "wrangler deploy --dry-run --config wrangler.public.jsonc && wrangler deploy --dry-run --config wrangler.monitor.jsonc && wrangler deploy --dry-run --config wrangler.maintenance.jsonc && wrangler deploy --dry-run --config wrangler.frontend.jsonc && wrangler deploy --dry-run --config wrangler.backend.jsonc && wrangler deploy --dry-run --config wrangler.exporter.jsonc",
+    "test": "vitest run",
+    "operator": "node scripts/operator.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261031.1",
+    "wrangler": "4.156.0",
+    "vitest": "5.0.5"
+  }
+}

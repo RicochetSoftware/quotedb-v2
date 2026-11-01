@@ -42,6 +42,8 @@ env:
   TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
   TF_VAR_state_encryption_passphrase: ${{ secrets.TOFU_STATE_PASSPHRASE }}
+  TF_VAR_status_monitoring_enabled: ${{ vars.STATUS_ENABLED || 'false' }}
+  TF_VAR_status_domain_enabled: ${{ vars.STATUS_ENABLED || 'false' }}
   TF_VAR_domain: ${{ vars.DOMAIN }}
   TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
   TF_VAR_access_team: ${{ vars.CF_ACCESS_TEAM || secrets.CF_ACCESS_TEAM }}
@@ -236,12 +238,22 @@ jobs:
           BOT_ENABLED: ${{ vars.DISCORD_BOT_ENABLED }}
           BOT_IMAGE_CANDIDATE: ${{ steps.images.outputs.bot }}
           DISCORD_BOT_ENV: ${{ secrets.DISCORD_BOT_ENV }}
+          OBSERVABILITY_ENV: ${{ secrets.OBSERVABILITY_ENV }}
         run: |
           if [[ "$BOT_ENABLED" == "true" ]]; then
             [[ -n "$DISCORD_BOT_ENV" ]] || { echo 'Missing DISCORD_BOT_ENV secret'; exit 1; }
             umask 077
             printf '%s\n' "$DISCORD_BOT_ENV" > "$RUNNER_TEMP/bot.env"
+            if [[ "${{ vars.STATUS_ENABLED }}" == "true" ]]; then
+              printf 'STATUS_HEARTBEAT_URL=https://status.%s/heartbeat\nMETRICS_ENABLED=true\n' "${{ vars.DOMAIN }}" >> "$RUNNER_TEMP/bot.env"
+              printf 'STATUS_HEARTBEAT_SECRET=%s\n' "$(cd infra/terraform && tofu output -json status_secrets | jq -r .BOT_SECRET)" >> "$RUNNER_TEMP/bot.env"
+            fi
             export BOT_IMAGE="$BOT_IMAGE_CANDIDATE" BOT_ENV_FILE="$RUNNER_TEMP/bot.env"
+          fi
+          if [[ -n "$OBSERVABILITY_ENV" ]]; then
+            umask 077
+            printf '%s\n' "$OBSERVABILITY_ENV" > "$RUNNER_TEMP/observability.env"
+            export OBSERVABILITY_ENV_FILE="$RUNNER_TEMP/observability.env"
           fi
           export ADMIN_ORIGIN_CERT_FILE="$RUNNER_TEMP/admin-origin.crt" ADMIN_ORIGIN_KEY_FILE="$RUNNER_TEMP/admin-origin.key"
           infra/droplet/deploy.sh "$DEPLOY_TARGET" "$API_IMAGE" "$STATIC_IMAGE" "$DOMAIN" \
@@ -249,6 +261,6 @@ jobs:
       - name: Remove temporary secrets
         if: always()
         run: |
-          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env" "$RUNNER_TEMP/admin-origin.crt" "$RUNNER_TEMP/admin-origin.key"; do
+          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env" "$RUNNER_TEMP/observability.env" "$RUNNER_TEMP/admin-origin.crt" "$RUNNER_TEMP/admin-origin.key"; do
             if [[ -f "$file" ]]; then unlink "$file"; fi
           done

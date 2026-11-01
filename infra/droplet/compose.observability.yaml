@@ -1,0 +1,28 @@
+# Opt in only after reviewing host headroom. No host ports or Docker socket.
+services:
+  api:
+    environment:
+      METRICS_ENABLED: "true"
+  alloy:
+    image: grafana/alloy:v1.16.0
+    user: "473:473"
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 192m
+    cpus: 0.25
+    environment:
+      GOMEMLIMIT: 96MiB
+      GOMAXPROCS: "1"
+    env_file: observability.env
+    command: [run, /etc/alloy/config.alloy, --storage.path=/var/lib/alloy, --server.http.listen-addr=127.0.0.1:12345, --disable-reporting]
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+      - /var/lib/quotedb-metrics:/var/lib/quotedb-metrics:ro
+      - alloy-data:/var/lib/alloy
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  alloy-data:

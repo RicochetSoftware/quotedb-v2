@@ -49,6 +49,10 @@ remote 'sudo cloud-init status --wait >/dev/null'
 stage=$(remote 'umask 077; mktemp -d /opt/quotedb/.release.XXXXXXXX')
 [[ $stage =~ ^/opt/quotedb/\.release\.[a-zA-Z0-9]+$ ]] || { echo "Invalid staging path" >&2; exit 1; }
 scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$here/compose.bot.yaml" "$target:$stage/"
+scp "${ssh_opts[@]}" -q "$here/compose.observability.yaml" "$here/../observability/config.alloy" "$here/../observability/container-metrics.sh" "$here/../observability/quotedb-container-metrics.service" "$here/../observability/quotedb-container-metrics.timer" "$target:$stage/"
+if [[ -n ${OBSERVABILITY_ENV_FILE:-} ]]; then
+  remote "umask 077; cat > '$stage/observability.env'" < "$OBSERVABILITY_ENV_FILE"
+fi
 remote "umask 077; cat > '$stage/admin-origin.crt'" < "$admin_cert"
 remote "umask 077; cat > '$stage/admin-origin.key'" < "$admin_key"
 remote "umask 077; cat > '$stage/api.env'" < "$api_env"

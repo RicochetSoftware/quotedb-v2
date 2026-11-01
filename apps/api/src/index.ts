@@ -1,5 +1,6 @@
 import { createDb } from './db/client'
 import { loadEnv } from './env'
+import { startMetrics } from './metrics'
 import { buildApp } from './server'
 
 const env = loadEnv()
@@ -13,12 +14,14 @@ const app = await buildApp({
       : undefined,
 })
 
+const metrics = process.env.METRICS_ENABLED === 'true' ? startMetrics(app.metrics) : undefined
 let shuttingDown = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {
     if (shuttingDown) return
     shuttingDown = true
     app.log.info({ signal }, 'shutting down')
+    metrics?.close()
     await app.close()
     await close()
     process.exit(0)
