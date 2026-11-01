@@ -13,12 +13,11 @@ import type {
   AdminUserUpdateBody,
 } from './schemas/admin'
 import type {
-  ChangePasswordBody,
-  ForgotPasswordBody,
-  LoginBody,
+  CodeChallenge,
   Me,
-  ResetPasswordBody,
+  RequestCodeBody,
   SessionList,
+  VerifyCodeBody,
 } from './schemas/auth'
 import type {
   Collection,
@@ -96,7 +95,16 @@ export function createApiClient({
     })
     if (res.status === 204) return undefined as T
     const text = await res.text()
-    const data: unknown = text ? JSON.parse(text) : undefined
+    let data: unknown
+    try {
+      data = text ? JSON.parse(text) : undefined
+    } catch {
+      throw new ApiError(
+        res.ok ? 401 : res.status,
+        'Your sign-in has expired. Reload the page to sign in again.',
+        undefined,
+      )
+    }
     if (!res.ok) {
       const message =
         (data as { message?: string } | undefined)?.message ?? `Request failed (${res.status})`
@@ -126,14 +134,10 @@ export function createApiClient({
         request<void>('DELETE', `/collections/${id}/tokens/${tokenId}`),
     },
     auth: {
-      login: (body: LoginBody) => request<Me>('POST', '/auth/login', { body }),
+      requestCode: (body: RequestCodeBody) =>
+        request<CodeChallenge>('POST', '/auth/code/request', { body }),
+      verifyCode: (body: VerifyCodeBody) => request<Me>('POST', '/auth/code/verify', { body }),
       logout: () => request<void>('POST', '/auth/logout'),
-      forgotPassword: (body: ForgotPasswordBody) =>
-        request<{ ok: true }>('POST', '/auth/password/forgot', { body }),
-      resetPassword: (body: ResetPasswordBody) =>
-        request<{ ok: true }>('POST', '/auth/password/reset', { body }),
-      changePassword: (body: ChangePasswordBody) =>
-        request<{ ok: true }>('POST', '/auth/password/change', { body }),
       sessions: () => request<SessionList>('GET', '/auth/sessions'),
       logoutOthers: () => request<{ ok: true }>('POST', '/auth/logout-others'),
     },
@@ -158,6 +162,7 @@ export function createApiClient({
       izaro: () => request<PublicQuote>('GET', '/public/izaro'),
     },
     admin: {
+      me: () => request<Me>('GET', '/admin/me'),
       collection: {
         get: (id: string) => request<CollectionSummary>('GET', `/admin/collections/${id}`),
         update: (id: string, body: CollectionUpdateBody) =>
@@ -182,8 +187,7 @@ export function createApiClient({
           request<AdminUser>('PATCH', `/admin/users/${id}`, { body }),
         remove: (id: string) => request<void>('DELETE', `/admin/users/${id}`),
         restore: (id: string) => request<AdminUser>('POST', `/admin/users/${id}/restore`),
-        sendPasswordReset: (id: string) =>
-          request<{ ok: true }>('POST', `/admin/users/${id}/password-reset`),
+        invite: (id: string) => request<{ ok: true }>('POST', `/admin/users/${id}/invite`),
         quotes: (id: string) => request<QuoteList>('GET', `/admin/users/${id}/quotes`),
       },
       quotes: {

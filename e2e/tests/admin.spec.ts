@@ -1,12 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { ADMIN, ADMIN_URL, API_PORT, PASSWORD, USER } from '../fixtures'
+import { ADMIN, ADMIN_URL, API_PORT, adminLogin, USER } from '../fixtures'
 
 test('admin: log in, see the dashboard, edit a user', async ({ page }) => {
-  await page.goto(ADMIN_URL)
-  await expect(page).toHaveURL(/\/login/)
-  await page.getByLabel('Email').fill(ADMIN.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await adminLogin(page)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByTestId('stat-Users')).toHaveText('2')
   await page.screenshot({ path: 'test-results/admin-dashboard.png', fullPage: true })
@@ -34,25 +30,20 @@ test('admin: log in, see the dashboard, edit a user', async ({ page }) => {
 })
 
 test('admin: a regular user is turned away', async ({ page }) => {
-  await page.goto(`${ADMIN_URL}/login`)
-  await page.getByLabel('Email').fill(USER.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'No admin access' })).toBeVisible()
+  await adminLogin(page, USER.email)
+  await expect(page.getByRole('heading', { name: 'Admin access required' })).toBeVisible()
 })
 
 test('admin: select quotes, cancel, bulk delete, and restore', async ({ page }) => {
-  await page.goto(`${ADMIN_URL}/login`)
-  await page.getByLabel('Email').fill(ADMIN.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await adminLogin(page)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
+  const me = await (await page.request.get(`${ADMIN_URL}/api/v1/admin/me`)).json()
   const ids: string[] = []
   for (const quote of ['Bulk test first', 'Bulk test second', 'Bulk test keep']) {
-    const res = await page.request.post(`http://localhost:${API_PORT}/api/v1/quotes`, {
+    const res = await page.request.post(`http://localhost:${API_PORT}/api/v1/admin/quotes`, {
       headers: { origin: ADMIN_URL },
-      data: { quote, author: 'Bulk test' },
+      data: { quote, author: 'Bulk test', user_id: me.id },
     })
     expect(res.ok()).toBeTruthy()
     ids.push((await res.json()).id)
@@ -118,15 +109,12 @@ test('admin: select quotes, cancel, bulk delete, and restore', async ({ page }) 
 test('admin: convert another user’s collection and manage its members and owner', async ({
   page,
 }) => {
-  await page.goto(`${ADMIN_URL}/login`)
-  await page.getByLabel('Email').fill(ADMIN.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await adminLogin(page)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   const collectionOwner = { name: 'Collection Owner', email: 'collection-owner@e2e.local' }
   const response = await page.request.post(`http://localhost:${API_PORT}/api/v1/admin/users`, {
     headers: { origin: ADMIN_URL },
-    data: { ...collectionOwner, password: PASSWORD },
+    data: collectionOwner,
   })
   expect(response.status()).toBe(201)
   const collection = await response.json()

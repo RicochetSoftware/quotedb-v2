@@ -31,6 +31,12 @@ export const EnvSchema = Type.Object({
   SMTP_URL: Type.String({ default: 'smtp://localhost:1025' }),
   RESEND_API_KEY: Type.Optional(Type.String()),
   HIBP_ENABLED: Type.Optional(Bool),
+  AUTH_CODE_SECRET: Type.Optional(Type.String({ minLength: 32 })),
+  AUTH_EMAIL_HOURLY_LIMIT: Type.Integer({ minimum: 1, default: 1000 }),
+  CF_ACCESS_TEAM: Type.Optional(Type.String({ pattern: '^[a-z0-9-]+$' })),
+  CF_ACCESS_AUD: Type.Optional(Type.String({ minLength: 1 })),
+  // Explicit local signed-token setup only; never accepted in production.
+  ADMIN_DEV_PUBLIC_KEY: Type.Optional(Type.String()),
   /** User whose quotes `/izaro` shows: a UUID or a legacy integer id. Unset = page disabled. */
   IZARO_USER_ID: Type.Optional(Type.String()),
   IZARO_COLLECTION_ID: Type.Optional(Type.String({ format: 'uuid' })),
@@ -52,6 +58,11 @@ export interface Env {
   SMTP_URL: string
   RESEND_API_KEY: string | undefined
   HIBP_ENABLED: boolean
+  AUTH_CODE_SECRET: string
+  AUTH_EMAIL_HOURLY_LIMIT: number
+  CF_ACCESS_TEAM: string | undefined
+  CF_ACCESS_AUD: string | undefined
+  ADMIN_DEV_PUBLIC_KEY: string | undefined
   IZARO_USER_ID: string | undefined
   IZARO_COLLECTION_ID: string | undefined
 }
@@ -69,8 +80,20 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     throw new Error(`Invalid environment:\n${problems}`)
   }
   const env = value as Type.Static<typeof EnvSchema>
+  if (
+    env.NODE_ENV === 'production' &&
+    (!env.CF_ACCESS_TEAM || !env.CF_ACCESS_AUD || !env.AUTH_CODE_SECRET || env.ADMIN_DEV_PUBLIC_KEY)
+  ) {
+    throw new Error(
+      'Production requires CF_ACCESS_TEAM, CF_ACCESS_AUD, AUTH_CODE_SECRET and forbids ADMIN_DEV_PUBLIC_KEY',
+    )
+  }
   return {
     ...env,
+    AUTH_CODE_SECRET: env.AUTH_CODE_SECRET ?? env.COOKIE_SECRET,
+    CF_ACCESS_TEAM: env.CF_ACCESS_TEAM,
+    CF_ACCESS_AUD: env.CF_ACCESS_AUD,
+    ADMIN_DEV_PUBLIC_KEY: env.ADMIN_DEV_PUBLIC_KEY,
     TRUST_PROXY: String(env.TRUST_PROXY ?? 'false') === 'true',
     HIBP_ENABLED: String(env.HIBP_ENABLED ?? 'true') === 'true',
     COOKIE_DOMAIN: env.COOKIE_DOMAIN,

@@ -1,23 +1,17 @@
-import { Button, NativeSelect, ThemeToggle, toast } from '@quotedb/ui'
+import { Button, NativeSelect, ThemeToggle } from '@quotedb/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Outlet, useNavigate } from '@tanstack/react-router'
+import { Link, Outlet } from '@tanstack/react-router'
 import { FolderOpenIcon, LayoutDashboardIcon, QuoteIcon, ShieldIcon, UsersIcon } from 'lucide-react'
 import { useId } from 'react'
-import { api, errorMessage, meQuery, WEB_URL } from '../api'
+import { meQuery, WEB_URL } from '../api'
 
 export function AdminLayout() {
   const { data: me } = useQuery(meQuery)
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
 
-  async function logout() {
-    try {
-      await api.auth.logout()
-    } catch (err) {
-      toast.error(errorMessage(err))
-    }
+  function logout() {
     queryClient.clear()
-    await navigate({ to: '/login' })
+    window.location.assign('/cdn-cgi/access/logout')
   }
 
   const link =

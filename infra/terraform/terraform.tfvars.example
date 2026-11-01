@@ -15,3 +15,9 @@ ssh_public_keys = [
 # extra_dns_records = {
 #   resend_dkim = { type = "TXT", name = "resend._domainkey.quotes.elmu.dev", content = "p=..." }
 # }
+
+cloudflare_account_id = "replace-with-account-id"
+access_team = "replace-with-existing-zero-trust-team"
+admin_hostname = "admin-quotes.elmu.dev"
+admin_emails = ["replace-with-admin@example.com"]
+# access_otp_provider_id = "existing-otp-provider-id"

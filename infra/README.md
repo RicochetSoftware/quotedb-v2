@@ -1,5 +1,10 @@
 # Production infrastructure
 
+Authentication cutover: see [AUTH.md](../docs/AUTH.md) before deploying. The admin app now uses
+a dedicated proxied hostname, Cloudflare Access, and an Origin CA certificate. The old admin
+hostname redirects. Required CI settings and rollback steps are documented there.
+
+
 QuoteDB runs entirely on **one DigitalOcean Droplet**: API, PostgreSQL 17, and Caddy serving
 `site`, `web`, and `admin`. Cloudflare supplies DNS and the R2 infrastructure-state bucket;
 there are no Cloudflare Pages projects or managed database services.
@@ -25,7 +30,7 @@ api.quotes.elmu.dev     ─┘                    └─ API :8080 → PostgreSQ
 ```
 
 Only Caddy publishes container ports. PostgreSQL is reachable inside Docker or through SSH.
-DNS records are **DNS-only**, so Caddy obtains certificates for all four hosts, including nested
+The original four DNS records are **DNS-only**, so Caddy obtains certificates for all four hosts, including nested
 subdomains, without depending on Cloudflare's Universal SSL coverage.
 
 ## Initial setup
@@ -33,7 +38,7 @@ subdomains, without depending on Cloudflare's Universal SSL coverage.
 1. Authenticate `doctl auth init`. OpenTofu separately reads `DIGITALOCEAN_TOKEN`.
 2. Create an SSH deployment key pair and include its public key plus your administrator public
    key in `ssh_public_keys`. CI uses the private key as `DEPLOY_SSH_KEY`.
-3. Create a Cloudflare API token with DNS edit access to the **elmu.dev** zone.
+3. Create a Cloudflare API token with DNS Edit and SSL and Certificates Edit access to the **elmu.dev** zone, plus account Access Apps/Policies and Identity Providers Write.
 4. Create a private R2 bucket named `quotedb-tfstate` and an Object Read & Write token for it.
    The access key ID and secret go in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 5. Generate and save a state-encryption passphrase (`openssl rand -base64 32`). Losing this
@@ -109,7 +114,7 @@ unlink /tmp/qdb-api.env
 unlink /tmp/qdb-postgres.env
 ```
 
-Build the static image with `--build-arg DOMAIN=quotes.elmu.dev`; its API URLs are baked into
+Build the static image with `--build-arg DOMAIN=quotes.elmu.dev --build-arg ADMIN_HOST=admin-quotes.elmu.dev`; its API URLs are baked into
 the browser bundles. Both images must target `linux/amd64`.
 
 A release waits for cloud-init, uploads files into a private staging directory, takes a remote
@@ -199,7 +204,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Use `DOMAIN=localhost` for `https://app.localhost` and the other local hosts (Caddy's local CA).
+Self-hosted production requires Access settings and an origin certificate; use the local development instructions in AUTH.md for offline work.
 Production uses the prebuilt-image stack in `droplet/`.
 
 ## Discord bot

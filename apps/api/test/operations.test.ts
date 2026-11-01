@@ -5,7 +5,6 @@ import { getTableConfig } from 'drizzle-orm/pg-core'
 import postgres from 'postgres'
 import { afterAll, afterEach, beforeAll, expect, inject, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
-import { verifyPassword } from '../src/lib/passwords'
 import { runMigrations } from '../src/migrate'
 
 let url: string
@@ -71,13 +70,7 @@ it('seeds usable development accounts once and refuses production or missing con
     ['admin@quotedb.local', 'SUPER_ADMIN'],
     ['izaro@quotedb.local', 'USER'],
   ])
-  for (const account of accounts)
-    expect(
-      await verifyPassword(
-        { passwordHash: account.password_hash, passwordAlgo: 'argon2id' },
-        'quotedb-dev-password',
-      ),
-    ).toEqual({ ok: true, needsRehash: false })
+  expect(accounts.every((account) => account.password_hash === null)).toBe(true)
   const originalQuotes = await sql`select id, collection_id from quotes order by id`
   expect(originalQuotes).toHaveLength(4)
   vi.resetModules()
@@ -109,6 +102,7 @@ it('keeps declared foreign-key targets and deletion rules aligned with the migra
     schema.quotes,
     schema.sessions,
     schema.passwordResetTokens,
+    schema.loginChallenges,
     schema.apiTokens,
   ].flatMap((table) => {
     const config = getTableConfig(table)

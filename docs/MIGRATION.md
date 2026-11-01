@@ -1,3 +1,5 @@
+> Authentication update: [AUTH.md](AUTH.md) supersedes the email/password and shared-admin-session design below. Web users use email codes; administrators use Cloudflare Access plus local roles.
+
 # QuoteDB v2 — Migration Plan
 
 A from-scratch rewrite of QuoteDB from Laravel 11 / Inertia / Filament (DigitalOcean + Ploi) to a TypeScript monorepo (one DigitalOcean Droplet for the full stack, defined as code). This document covers stack analysis, target architecture, data migration, and a phased delivery plan.

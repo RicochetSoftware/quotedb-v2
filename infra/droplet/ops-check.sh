@@ -59,4 +59,6 @@ fi
 # shellcheck disable=SC1091
 . /etc/os-release
 echo "$PRETTY_NAME, kernel $(uname -r), up $(uptime -p | sed 's/^up //'), disk ${disk}%, api $health"
+# Origin CA certificate rotation is managed by OpenTofu; warn a month ahead.
+openssl x509 -checkend 2592000 -noout -in /opt/quotedb/admin-origin.crt || fail "Admin origin certificate missing or expiring within 30 days"
 exit "$failed"

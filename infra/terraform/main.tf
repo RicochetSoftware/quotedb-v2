@@ -24,17 +24,19 @@ module "backend" {
 
   api_env = merge(
     {
-      NODE_ENV       = "production"
-      LOG_LEVEL      = var.log_level
-      TRUST_PROXY    = "true"
-      APP_URL        = "https://${local.hosts.api}"
-      WEB_URL        = "https://${local.hosts.web}"
-      ADMIN_URL      = "https://${local.hosts.admin}"
-      COOKIE_DOMAIN  = ".${var.domain}"
-      COOKIE_SECRET  = random_password.cookie_secret.result
-      MAIL_FROM      = "QuoteDB <no-reply@${var.domain}>"
-      RESEND_API_KEY = var.resend_api_key
-      HIBP_ENABLED   = tostring(var.hibp_enabled)
+      NODE_ENV         = "production"
+      LOG_LEVEL        = var.log_level
+      TRUST_PROXY      = "true"
+      APP_URL          = "https://${local.hosts.api}"
+      WEB_URL          = "https://${local.hosts.web}"
+      ADMIN_URL        = "https://${var.admin_hostname}"
+      COOKIE_DOMAIN    = ".${var.domain}"
+      COOKIE_SECRET    = random_password.cookie_secret.result
+      MAIL_FROM        = "QuoteDB <no-reply@${var.domain}>"
+      RESEND_API_KEY   = var.resend_api_key
+      AUTH_CODE_SECRET = random_password.auth_code_secret.result
+      CF_ACCESS_TEAM   = var.access_team
+      CF_ACCESS_AUD    = cloudflare_zero_trust_access_application.admin.aud
     },
     var.izaro_user_id == "" ? {} : { IZARO_USER_ID = var.izaro_user_id },
     var.izaro_collection_id == "" ? {} : { IZARO_COLLECTION_ID = var.izaro_collection_id },

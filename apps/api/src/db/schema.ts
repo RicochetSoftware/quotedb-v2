@@ -196,3 +196,26 @@ export type QuoteRow = typeof quotes.$inferSelect
 export type ApiTokenRow = typeof apiTokens.$inferSelect
 
 export type CollectionRow = typeof collections.$inferSelect
+
+/** Short-lived email challenges. Plain codes never enter the database. */
+export const loginChallenges = pgTable(
+  'login_challenges',
+  {
+    id: uuid().primaryKey(),
+    email: text().notNull(),
+    userId: uuid().references(() => users.id, { onDelete: 'cascade' }),
+    codeDigest: text().notNull(),
+    expiresAt: tz().notNull(),
+    attempts: integer().notNull().default(0),
+    consumedAt: tz(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('login_challenges_email_idx').on(t.email)],
+)
+
+/** Fixed-window budgets shared by every API process, including after restarts. */
+export const authBudgets = pgTable('auth_budgets', {
+  key: text().primaryKey(),
+  startedAt: tz().notNull(),
+  count: integer().notNull(),
+})

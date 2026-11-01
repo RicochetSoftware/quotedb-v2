@@ -50,8 +50,6 @@ export function toAdminUser(user: User, quoteCount: number): AdminUser {
     role: user.role,
     external_id: user.externalId,
     quote_count: quoteCount,
-    password_set: user.passwordHash !== null,
-    legacy_password: user.passwordAlgo === 'bcrypt-legacy',
     created_at: iso(user.createdAt),
     updated_at: iso(user.updatedAt),
     deleted_at: isoOrNull(user.deletedAt),

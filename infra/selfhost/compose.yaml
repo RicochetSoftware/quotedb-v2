@@ -38,13 +38,15 @@ services:
       DATABASE_URL: postgresql://quotedb:${POSTGRES_PASSWORD}@postgres:5432/quotedb
       APP_URL: https://api.${DOMAIN:?set DOMAIN}
       WEB_URL: https://app.${DOMAIN}
-      ADMIN_URL: https://admin.${DOMAIN}
+      ADMIN_URL: https://${ADMIN_HOST:?set ADMIN_HOST}
       COOKIE_DOMAIN: .${DOMAIN}
       COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
       MAIL_FROM: ${MAIL_FROM:-QuoteDB <no-reply@${DOMAIN}>}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SMTP_URL: ${SMTP_URL:-smtp://localhost:1025}
-      HIBP_ENABLED: ${HIBP_ENABLED:-true}
+      AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?set AUTH_CODE_SECRET}
+      CF_ACCESS_TEAM: ${CF_ACCESS_TEAM:?set CF_ACCESS_TEAM}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:?set CF_ACCESS_AUD}
       IZARO_USER_ID: ${IZARO_USER_ID:-}
       IZARO_COLLECTION_ID: ${IZARO_COLLECTION_ID:-}
     healthcheck:
@@ -59,11 +61,13 @@ services:
       dockerfile: infra/docker/static.Dockerfile
       args:
         DOMAIN: ${DOMAIN}
+        ADMIN_HOST: ${ADMIN_HOST}
     restart: unless-stopped
     depends_on:
       - api
     environment:
       DOMAIN: ${DOMAIN}
+      ADMIN_HOST: ${ADMIN_HOST}
     ports:
       - "80:80"
       - "443:443"
@@ -71,6 +75,8 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+      - ./admin-origin.crt:/etc/caddy/admin-origin.crt:ro
+      - ./admin-origin.key:/etc/caddy/admin-origin.key:ro
 
 volumes:
   postgres-data:

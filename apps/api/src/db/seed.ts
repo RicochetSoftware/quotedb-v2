@@ -1,6 +1,5 @@
 // Dev-only seed: an admin and a regular user with a few quotes. Safe to re-run.
 import { eq } from 'drizzle-orm'
-import { hashPassword } from '../lib/passwords'
 import { personalCollection } from '../modules/collections/access'
 import { createDb } from './client'
 import { quotes, users } from './schema'
@@ -10,7 +9,6 @@ if (!url) throw new Error('DATABASE_URL is required')
 if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed a production database')
 
 const { db, close } = createDb(url, { max: 1 })
-const password = 'quotedb-dev-password'
 
 async function upsertUser(
   email: string,
@@ -20,10 +18,7 @@ async function upsertUser(
 ) {
   const [existing] = await db.select().from(users).where(eq(users.email, email))
   if (existing) return existing
-  const [created] = await db
-    .insert(users)
-    .values({ email, name, role, externalId, passwordHash: await hashPassword(password) })
-    .returning()
+  const [created] = await db.insert(users).values({ email, name, role, externalId }).returning()
   if (!created) throw new Error(`failed to create ${email}`)
   return created
 }
@@ -65,5 +60,7 @@ if (!anyQuote) {
   ])
 }
 
-console.log(`Seeded. Sign in as admin@quotedb.local or izaro@quotedb.local with "${password}".`)
+console.log(
+  `Seeded. Sign in as admin@quotedb.local or izaro@quotedb.local using an email code (Mailpit); configure the local admin signer with node scripts/admin-dev.mjs.`,
+)
 await close()

@@ -1,15 +1,6 @@
 import Type from 'typebox'
 import { CollectionSummary } from './collections'
-import {
-  DateOrTimestamp,
-  Email,
-  NewPassword,
-  Paging,
-  RoleSchema,
-  StatusFilter,
-  Timestamp,
-  Uuid,
-} from './common'
+import { DateOrTimestamp, Email, Paging, RoleSchema, StatusFilter, Timestamp, Uuid } from './common'
 import { AUTHOR_MAX_LENGTH, QUOTE_MAX_LENGTH, Quote } from './quotes'
 
 const nullable = <T extends Type.TSchema>(schema: T) => Type.Union([schema, Type.Null()])
@@ -21,10 +12,6 @@ export const AdminUser = Type.Object({
   role: RoleSchema,
   external_id: nullable(Type.Integer()),
   quote_count: Type.Integer(),
-  /** False for invited users who haven't set a password yet. */
-  password_set: Type.Boolean(),
-  /** True while the user still has a bcrypt hash carried over from v1. */
-  legacy_password: Type.Boolean(),
   created_at: Timestamp,
   updated_at: Timestamp,
   deleted_at: nullable(Timestamp),
@@ -49,8 +36,6 @@ export const AdminUserCreateBody = Type.Object(
     email: Email,
     name: Type.String({ minLength: 1, maxLength: 255 }),
     role: Type.Optional(RoleSchema),
-    /** Omit to email the user an invite link where they choose their own password. */
-    password: Type.Optional(NewPassword),
   },
   { additionalProperties: false },
 )

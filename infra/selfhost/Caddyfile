@@ -32,8 +32,26 @@ app.{$DOMAIN} {
 }
 
 admin.{$DOMAIN} {
-	root * /srv/admin
-	import spa
+	redir https://{$ADMIN_HOST}{uri} permanent
+}
+
+{$ADMIN_HOST} {
+	tls /etc/caddy/admin-origin.crt /etc/caddy/admin-origin.key
+	# Validate Access at the origin too, including static pages. A direct-origin
+	# request cannot bypass the Cloudflare login page by supplying only Host.
+	header Cache-Control "private, no-store"
+	handle /api/v1/admin/* {
+		reverse_proxy api:8080
+	}
+	handle {
+		forward_auth api:8080 {
+			uri /api/v1/admin/me
+		}
+		root * /srv/admin
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
 }
 
 api.{$DOMAIN} {

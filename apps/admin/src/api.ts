@@ -1,7 +1,11 @@
 import { ApiError, createApiClient, type Me } from '@quotedb/shared'
 import { QueryClient, queryOptions } from '@tanstack/react-query'
 
-export const api = createApiClient({ baseUrl: import.meta.env.VITE_API_URL ?? '' })
+export const api = createApiClient({
+  baseUrl: import.meta.env.VITE_ADMIN_API_URL ?? '',
+  fetch: (input, init) =>
+    fetch(input, { ...init, headers: { ...init?.headers, 'X-Requested-With': 'XMLHttpRequest' } }),
+})
 export const WEB_URL = import.meta.env.VITE_WEB_URL ?? 'http://localhost:5180'
 
 export const queryClient = new QueryClient({
@@ -17,9 +21,9 @@ export const meQuery = queryOptions({
   queryKey: ['me'],
   queryFn: async (): Promise<Me | null> => {
     try {
-      return await api.me()
+      return await api.admin.me()
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) return null
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) return null
       throw err
     }
   },

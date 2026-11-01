@@ -43,6 +43,11 @@ env:
   TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
   TF_VAR_state_encryption_passphrase: ${{ secrets.TOFU_STATE_PASSPHRASE }}
   TF_VAR_domain: ${{ vars.DOMAIN }}
+  TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  TF_VAR_access_team: ${{ vars.CF_ACCESS_TEAM || secrets.CF_ACCESS_TEAM }}
+  TF_VAR_admin_hostname: ${{ vars.ADMIN_HOST || secrets.ADMIN_HOST }}
+  TF_VAR_admin_emails: ${{ vars.ADMIN_EMAILS || secrets.ADMIN_EMAILS }}
+  TF_VAR_access_otp_provider_id: ${{ vars.CF_ACCESS_OTP_PROVIDER_ID || secrets.CF_ACCESS_OTP_PROVIDER_ID }}
   TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
   TF_VAR_ssh_public_keys: ${{ vars.SSH_PUBLIC_KEYS }}
   TF_VAR_digitalocean_region: ${{ vars.DIGITALOCEAN_REGION || 'fra1' }}
@@ -171,7 +176,9 @@ jobs:
           context: .
           file: infra/docker/static.Dockerfile
           platforms: linux/amd64
-          build-args: DOMAIN=${{ vars.DOMAIN }}
+          build-args: |
+            DOMAIN=${{ vars.DOMAIN }}
+            ADMIN_HOST=${{ vars.ADMIN_HOST || secrets.ADMIN_HOST }}
           push: true
           pull: true
           tags: ${{ steps.images.outputs.static }}
@@ -208,6 +215,8 @@ jobs:
           tofu output -raw api_ssh_known_hosts > "$RUNNER_TEMP/known_hosts"
           tofu output -raw api_env_file > "$RUNNER_TEMP/api.env"
           tofu output -raw postgres_env_file > "$RUNNER_TEMP/postgres.env"
+          tofu output -raw admin_origin_certificate > "$RUNNER_TEMP/admin-origin.crt"
+          tofu output -raw admin_origin_private_key > "$RUNNER_TEMP/admin-origin.key"
       - name: Load deploy key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -223,6 +232,7 @@ jobs:
           API_IMAGE: ${{ steps.images.outputs.api }}
           STATIC_IMAGE: ${{ steps.images.outputs.static }}
           DOMAIN: ${{ vars.DOMAIN }}
+          ADMIN_HOST: ${{ vars.ADMIN_HOST || secrets.ADMIN_HOST }}
           BOT_ENABLED: ${{ vars.DISCORD_BOT_ENABLED }}
           BOT_IMAGE_CANDIDATE: ${{ steps.images.outputs.bot }}
           DISCORD_BOT_ENV: ${{ secrets.DISCORD_BOT_ENV }}
@@ -233,11 +243,12 @@ jobs:
             printf '%s\n' "$DISCORD_BOT_ENV" > "$RUNNER_TEMP/bot.env"
             export BOT_IMAGE="$BOT_IMAGE_CANDIDATE" BOT_ENV_FILE="$RUNNER_TEMP/bot.env"
           fi
+          export ADMIN_ORIGIN_CERT_FILE="$RUNNER_TEMP/admin-origin.crt" ADMIN_ORIGIN_KEY_FILE="$RUNNER_TEMP/admin-origin.key"
           infra/droplet/deploy.sh "$DEPLOY_TARGET" "$API_IMAGE" "$STATIC_IMAGE" "$DOMAIN" \
             "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/known_hosts"
       - name: Remove temporary secrets
         if: always()
         run: |
-          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env"; do
+          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env" "$RUNNER_TEMP/admin-origin.crt" "$RUNNER_TEMP/admin-origin.key"; do
             if [[ -f "$file" ]]; then unlink "$file"; fi
           done

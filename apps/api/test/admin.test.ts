@@ -19,7 +19,7 @@ describe('admin access', () => {
 })
 
 describe('admin users', () => {
-  it('creates a user with an invite email, which sets their password', async () => {
+  it('creates a user with an invite email, which links to email-code login', async () => {
     const { cookie } = await userWithRole(ctx, 'ADMIN')
     ctx.mailer.outbox.length = 0
     const res = await admin(cookie, {
@@ -31,18 +31,11 @@ describe('admin users', () => {
     expect(res.json()).toMatchObject({
       email: 'new.person@example.com',
       role: 'USER',
-      password_set: false,
     })
 
     expect(ctx.mailer.outbox).toHaveLength(1)
-    const token = decodeURIComponent(ctx.mailer.outbox[0]?.text.match(/token=([^\s&]+)/)?.[1] ?? '')
-    const set = await ctx.request({
-      method: 'POST',
-      url: '/api/v1/auth/password/reset',
-      payload: { token, new_password: 'my chosen password!' },
-    })
-    expect(set.statusCode).toBe(200)
-    await ctx.login('new.person@example.com', 'my chosen password!')
+    expect(ctx.mailer.outbox[0]?.text).toContain('/login')
+    expect(ctx.mailer.outbox[0]?.text).not.toContain('token=')
 
     const dup = await admin(cookie, {
       method: 'POST',
@@ -145,13 +138,13 @@ describe('admin users', () => {
     expect(demote.statusCode).toBe(200)
   })
 
-  it('sends a password reset email on request', async () => {
+  it('resends an invitation on request', async () => {
     const { cookie } = await userWithRole(ctx, 'ADMIN')
     const target = await ctx.createUser()
     ctx.mailer.outbox.length = 0
     const res = await admin(cookie, {
       method: 'POST',
-      url: `/api/v1/admin/users/${target.id}/password-reset`,
+      url: `/api/v1/admin/users/${target.id}/invite`,
     })
     expect(res.statusCode).toBe(200)
     expect(ctx.mailer.outbox[0]?.to).toBe(target.email)

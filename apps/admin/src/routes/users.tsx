@@ -129,8 +129,6 @@ export function UsersPage() {
                     <TableCell className="text-right tabular-nums">{u.quote_count}</TableCell>
                     <TableCell className="space-x-1">
                       {u.deleted_at && <Badge variant="destructive">deleted</Badge>}
-                      {!u.password_set && <Badge variant="outline">invited</Badge>}
-                      {u.legacy_password && <Badge variant="outline">legacy password</Badge>}
                     </TableCell>
                   </TableRow>
                 ))}

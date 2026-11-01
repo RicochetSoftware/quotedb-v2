@@ -25,3 +25,10 @@ backend.hcl
 *.sql.gz
 *.dump
 /*.sql
+
+# Local signing keys (development and browser tests)
+.local/
+
+# Deployment TLS material
+admin-origin.crt
+admin-origin.key

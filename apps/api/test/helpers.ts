@@ -1,8 +1,11 @@
-import { randomUUID } from 'node:crypto'
+import { generateKeyPairSync, randomUUID } from 'node:crypto'
 import type { Role, Scope } from '@quotedb/shared'
+import { eq } from 'drizzle-orm'
 import type { LightMyRequestResponse } from 'fastify'
+import { SignJWT } from 'jose'
 import postgres from 'postgres'
 import { afterAll, beforeAll, inject } from 'vitest'
+import { createSession } from '../src/auth/session'
 import { createDb, type Db } from '../src/db/client'
 import { users } from '../src/db/schema'
 import { loadEnv } from '../src/env'
@@ -37,6 +40,7 @@ export interface TestContext {
     overrides?: Partial<typeof users.$inferInsert> & { password?: string },
   ): Promise<typeof users.$inferSelect>
   login(email: string, password?: string): Promise<string>
+  adminAssertion(email: string, claims?: Record<string, unknown>): Promise<string>
   createToken(
     cookie: string,
     scopes: Scope[],
@@ -48,6 +52,8 @@ export interface TestContext {
 /** Fresh database + app per test file. Call at the top level of a test file. */
 export function setupTestApp(envOverrides: Record<string, string> = {}): TestContext {
   const ctx = {} as TestContext
+  const keys = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  const adminIdentities = new Map<string, string>()
   let close: () => Promise<void>
   let breachChecker: BreachChecker = noBreachCheck
   const dbName = `test_${randomUUID().replaceAll('-', '')}`
@@ -68,6 +74,8 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
       ADMIN_URL: ADMIN_ORIGIN,
       APP_URL: 'http://api.test',
       HIBP_ENABLED: 'false',
+      CF_ACCESS_AUD: 'test-admin',
+      ADMIN_DEV_PUBLIC_KEY: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
       ...envOverrides,
     })
     const created = createDb(env.DATABASE_URL, { max: 5 })
@@ -92,9 +100,17 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
       setBreachChecker(fn: BreachChecker) {
         breachChecker = fn
       },
-      request({ cookie, token, headers, ...opts }) {
+      async request({ cookie, token, headers, ...opts }) {
+        // Domain tests use both credentials from the fixture. Auth-boundary tests explicitly
+        // suppress this header or use app.inject to exercise cookie-only requests.
+        const email = cookie && adminIdentities.get(cookie)
+        const assertion =
+          email && opts.url.startsWith('/api/v1/admin')
+            ? await ctx.adminAssertion(email)
+            : undefined
         const merged: Record<string, unknown> = {
-          origin: WEB_ORIGIN,
+          origin: opts.url.startsWith('/api/v1/admin') ? ADMIN_ORIGIN : WEB_ORIGIN,
+          ...(assertion ? { 'cf-access-jwt-assertion': assertion } : {}),
           ...(cookie ? { cookie } : {}),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
           ...headers,
@@ -115,16 +131,27 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
         if (!user) throw new Error('failed to create user')
         return user
       },
-      async login(email, password = PASSWORD) {
-        const res = await ctx.request({
-          method: 'POST',
-          url: '/api/v1/auth/login',
-          payload: { email, password },
+      async adminAssertion(email, claims = {}) {
+        return new SignJWT({ email })
+          .setProtectedHeader({ alg: 'RS256' })
+          .setIssuer(String(claims.iss ?? 'http://quotedb.local/access'))
+          .setAudience(String(claims.aud ?? 'test-admin'))
+          .setSubject(email)
+          .setIssuedAt()
+          .setExpirationTime((claims.exp as number | undefined) ?? '1h')
+          .sign(keys.privateKey)
+      },
+      async login(email) {
+        // Most domain tests need a session, not another OTP test or shared sending budget.
+        const [user] = await created.db.select().from(users).where(eq(users.email, email))
+        if (!user) throw new Error('Unknown fixture account')
+        const { token } = await createSession(created.db, user.id, {
+          userAgent: 'test',
+          ip: '127.0.0.1',
         })
-        if (res.statusCode !== 200) throw new Error(`login failed: ${res.statusCode} ${res.body}`)
-        const cookie = res.cookies.find((c) => c.name === 'qdb_session')
-        if (!cookie) throw new Error('no session cookie')
-        return `qdb_session=${cookie.value}`
+        const cookie = `qdb_session=${app.signCookie(token)}`
+        adminIdentities.set(cookie, email)
+        return cookie
       },
       async createToken(cookie, scopes, extra = {}) {
         const res = await ctx.request({

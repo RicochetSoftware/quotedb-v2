@@ -105,7 +105,16 @@ function EditUserCard({ user }: { user: AdminUser }) {
           <Field id="name" label="Name" error={errors.name?.message}>
             <Input id="name" {...form.register('name')} />
           </Field>
-          <Field id="email" label="Email" error={errors.email?.message}>
+          <Field
+            id="email"
+            label="Email"
+            error={errors.email?.message}
+            hint={
+              user.role === 'USER'
+                ? 'Changing this signs out existing sessions and invalidates pending codes.'
+                : 'Changing this signs out web sessions. Update the Cloudflare Access allowlist too, or admin access will be lost.'
+            }
+          >
             <Input id="email" type="email" {...form.register('email')} />
           </Field>
           <Field
@@ -144,9 +153,8 @@ function AccountActionsCard({ user }: { user: AdminUser }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin'] })
 
   const reset = useMutation({
-    mutationFn: () => api.admin.users.sendPasswordReset(user.id),
-    onSuccess: () =>
-      toast.success(`${user.password_set ? 'Reset' : 'Invite'} email sent to ${user.email}`),
+    mutationFn: () => api.admin.users.invite(user.id),
+    onSuccess: () => toast.success(`Invitation sent to ${user.email}`),
     onError: (err) => toast.error(errorMessage(err)),
   })
   const remove = useMutation({
@@ -175,8 +183,6 @@ function AccountActionsCard({ user }: { user: AdminUser }) {
           {user.deleted_at && (
             <Badge variant="destructive">deleted {formatDate(user.deleted_at)}</Badge>
           )}
-          {!user.password_set && <Badge variant="outline">invite pending</Badge>}
-          {user.legacy_password && <Badge variant="outline">legacy bcrypt password</Badge>}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -198,7 +204,7 @@ function AccountActionsCard({ user }: { user: AdminUser }) {
                 onClick={() => reset.mutate()}
                 disabled={reset.isPending}
               >
-                {user.password_set ? 'Send password reset email' : 'Resend invite'}
+                Resend invitation
               </Button>
               <p className="text-sm text-muted-foreground">The link is emailed to {user.email}.</p>
             </div>

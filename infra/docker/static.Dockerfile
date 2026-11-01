@@ -4,6 +4,7 @@
 
 FROM node:24-slim AS build
 ARG DOMAIN
+ARG ADMIN_HOST
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=true
 RUN corepack enable
 WORKDIR /repo
@@ -12,9 +13,10 @@ RUN pnpm install --frozen-lockfile --filter @quotedb/web... --filter @quotedb/ad
 # Build-time public config (baked into the bundles, never secrets).
 ENV VITE_API_URL=https://api.${DOMAIN} \
     VITE_WEB_URL=https://app.${DOMAIN} \
-    VITE_ADMIN_URL=https://admin.${DOMAIN} \
+    VITE_ADMIN_URL=https://${ADMIN_HOST} \
+    VITE_ADMIN_API_URL="" \
     PUBLIC_WEB_URL=https://app.${DOMAIN}
-RUN test -n "$DOMAIN" \
+RUN test -n "$DOMAIN" && test -n "$ADMIN_HOST" \
   && pnpm --filter @quotedb/web build \
   && pnpm --filter @quotedb/admin build \
   && pnpm --filter @quotedb/site build

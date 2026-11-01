@@ -21,7 +21,7 @@ export function sessionCookieOptions(env: Env): CookieSerializeOptions {
 }
 
 export async function createSession(
-  db: Db,
+  db: Db | Parameters<Parameters<Db['transaction']>[0]>[0],
   userId: string,
   meta: { userAgent: string | undefined; ip: string },
 ): Promise<{ token: string; sessionId: string }> {
@@ -42,7 +42,7 @@ export async function createSession(
 
 /** Resolve a cookie token to its live session and (non-deleted) user. */
 export async function findSession(
-  db: Db,
+  db: Db | Parameters<Parameters<Db['transaction']>[0]>[0],
   token: string,
 ): Promise<{ sessionId: string; lastSeenAt: Date | null; user: User } | null> {
   const [row] = await db

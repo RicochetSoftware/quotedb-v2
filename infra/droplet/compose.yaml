@@ -45,6 +45,7 @@ services:
         condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN}
+      ADMIN_HOST: ${ADMIN_HOST:?set ADMIN_HOST}
     ports:
       - "80:80"
       - "443:443"
@@ -52,6 +53,8 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+      - ./admin-origin.crt:/etc/caddy/admin-origin.crt:ro
+      - ./admin-origin.key:/etc/caddy/admin-origin.key:ro
 
 volumes:
   postgres-data:

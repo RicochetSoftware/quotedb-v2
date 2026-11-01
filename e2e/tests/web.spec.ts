@@ -1,13 +1,11 @@
 import { expect, test } from '@playwright/test'
-import { PASSWORD, USER, WEB_URL } from '../fixtures'
+import { WEB_URL, webLogin } from '../fixtures'
 
 test('web: log in, add a quote, find it, mint an API token', async ({ page, request }) => {
   await page.goto(`${WEB_URL}/quotes`)
   // Protected page bounces to login and comes back afterwards.
   await expect(page).toHaveURL(/\/login\?redirect=/)
-  await page.getByLabel('Email').fill(USER.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Log in' }).click()
+  await webLogin(page)
   await expect(page.getByRole('heading', { name: 'Your quotes' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Add quote' }).click()
@@ -47,9 +45,7 @@ test('web: create a shared collection, switch quotes, and issue a collection tok
   request,
 }) => {
   await page.goto(`${WEB_URL}/login`)
-  await page.getByLabel('Email').fill(USER.email)
-  await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Log in' }).click()
+  await webLogin(page)
   await page.getByRole('link', { name: 'Manage collections' }).click()
   const personalId = await page.getByLabel('Collection', { exact: true }).inputValue()
   await page.getByLabel('Collection name').fill('E2E Discord server')

@@ -24,14 +24,14 @@ export function UserNewPage() {
   const queryClient = useQueryClient()
   const form = useForm<AdminUserCreateBody>({
     resolver: typeboxResolver(AdminUserCreateBody),
-    defaultValues: { email: '', name: '', role: 'USER', password: '' },
+    defaultValues: { email: '', name: '', role: 'USER' },
   })
   const { errors, isSubmitting } = form.formState
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       const user = await api.admin.users.create(values)
-      toast.success(values.password ? 'User created' : `Invite sent to ${user.email}`)
+      toast.success(`Invite sent to ${user.email}`)
       await queryClient.invalidateQueries({ queryKey: ['admin'] })
       await navigate({ to: '/users/$id', params: { id: user.id } })
     } catch (err) {
@@ -46,8 +46,7 @@ export function UserNewPage() {
         <CardHeader>
           <CardTitle>Account details</CardTitle>
           <CardDescription>
-            Leave the password empty to email an invite link where the user picks their own (valid 7
-            days).
+            The user will receive an invitation to sign in with an email code.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -66,18 +65,6 @@ export function UserNewPage() {
                   </option>
                 ))}
               </NativeSelect>
-            </Field>
-            <Field
-              id="password"
-              label="Initial password (optional)"
-              error={errors.password?.message}
-            >
-              <Input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                {...form.register('password')}
-              />
             </Field>
             <Button type="submit" className="w-fit" disabled={isSubmitting}>
               Create user

@@ -36,11 +36,26 @@ export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: options.logger ?? {
       level: env.LOG_LEVEL,
-      redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+      redact: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["cf-access-jwt-assertion"]',
+        'res.headers["set-cookie"]',
+      ],
     },
     trustProxy: env.TRUST_PROXY,
   }).withTypeProvider<TypeBoxTypeProvider>()
   app.setValidatorCompiler(TypeBoxValidatorCompiler)
+  app.setErrorHandler((error, request, reply) => {
+    const status = (error as { statusCode?: number }).statusCode ?? 500
+    if (status >= 500) {
+      request.log.error({ err: error }, 'Request failed')
+      return reply
+        .code(500)
+        .send({ statusCode: 500, error: 'Internal Server Error', message: 'Internal server error' })
+    }
+    return reply.send(error)
+  })
 
   const ctx: AppContext = {
     env,
@@ -72,7 +87,7 @@ export async function buildApp(options: BuildAppOptions) {
     keyGenerator: (request) => {
       const auth = request.auth
       if (auth?.kind === 'token') return `token:${auth.tokenId}`
-      if (auth?.kind === 'session') return `user:${auth.user.id}`
+      if (auth?.kind === 'session' || auth?.kind === 'admin') return `user:${auth.user.id}`
       return `ip:${request.ip}`
     },
   })
@@ -84,6 +99,7 @@ export async function buildApp(options: BuildAppOptions) {
       components: {
         securitySchemes: {
           session: { type: 'apiKey', in: 'cookie', name: SESSION_COOKIE },
+          cloudflareAccess: { type: 'apiKey', in: 'header', name: 'Cf-Access-Jwt-Assertion' },
           bearer: {
             type: 'http',
             scheme: 'bearer',
@@ -93,6 +109,11 @@ export async function buildApp(options: BuildAppOptions) {
       },
       security: [{ session: [] }, { bearer: [] }],
     },
+  })
+  app.addHook('onRoute', (route) => {
+    if (route.url.startsWith('/api/v1/admin/'))
+      route.schema = { ...route.schema, security: [{ cloudflareAccess: [] }] }
+    if (route.url.startsWith('/api/v1/auth/code/')) route.schema = { ...route.schema, security: [] }
   })
   await app.register(swaggerUi, { routePrefix: '/api/documentation' })
 

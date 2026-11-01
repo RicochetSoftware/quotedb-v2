@@ -89,7 +89,9 @@ describe('personal access tokens (MIGRATION.md §3.6)', () => {
             }
           : {}),
       })
-      expect(res.statusCode, `${method} ${url}`).toBe(403)
+      expect(res.statusCode, `${method} ${url}`).toBe(
+        url.includes('/admin/') ? 401 : url.includes('/password/') ? 404 : 403,
+      )
     }
   })
 

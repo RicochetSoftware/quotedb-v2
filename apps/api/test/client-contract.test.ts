@@ -1,13 +1,12 @@
 import { createApiClient } from '@quotedb/shared'
 import { expect, it } from 'vitest'
-import { PASSWORD, type RequestOptions, setupTestApp } from './helpers'
+import { type RequestOptions, setupTestApp } from './helpers'
 
 const ctx = setupTestApp()
 
 // Exercise the public client's serialization against the actual routes and database.
 // Fastify injection replaces only the socket, while this jar models browser cookies.
-function browserClient() {
-  let cookie: string | undefined
+function browserClient(cookie?: string) {
   return createApiClient({
     baseUrl: 'http://api.test',
     fetch: async (input, init) => {
@@ -30,10 +29,7 @@ function browserClient() {
 
 it('supports a signed-in quote and personal token lifecycle through the shared client', async () => {
   const user = await ctx.createUser()
-  const client = browserClient()
-  expect(await client.auth.login({ email: user.email, password: PASSWORD })).toMatchObject({
-    id: user.id,
-  })
+  const client = browserClient(await ctx.login(user.email))
   expect(await client.me()).toMatchObject({ email: user.email })
   const quote = await client.quotes.create({ quote: 'A & B + C?', author: 'Ada' })
   expect(await client.quotes.get(quote.id)).toMatchObject({ quote: 'A & B + C?' })
@@ -58,20 +54,19 @@ it('supports a signed-in quote and personal token lifecycle through the shared c
 
 it('supports administrator edits, soft deletion and restoration without exposing admin routes to users', async () => {
   const admin = await ctx.createUser({ role: 'ADMIN' })
-  const client = browserClient()
-  await client.auth.login({ email: admin.email, password: PASSWORD })
+  const client = browserClient(await ctx.login(admin.email))
   const user = await client.admin.users.create({
     email: 'contract@example.test',
     name: 'Invited user',
   })
-  expect(await client.admin.users.get(user.id)).toMatchObject({ password_set: false })
+  expect(await client.admin.users.get(user.id)).toMatchObject({ email: user.email })
   expect(await client.admin.users.update(user.id, { name: 'Renamed user' })).toMatchObject({
     name: 'Renamed user',
   })
   expect((await client.admin.users.list({ q: 'Renamed' })).users.map((item) => item.id)).toContain(
     user.id,
   )
-  await client.admin.users.sendPasswordReset(user.id)
+  await client.admin.users.invite(user.id)
   expect(ctx.mailer.outbox.some((message) => message.to === user.email)).toBe(true)
   const quote = await client.admin.quotes.create({
     user_id: user.id,
@@ -93,16 +88,14 @@ it('supports administrator edits, soft deletion and restoration without exposing
   expect(await client.admin.users.restore(user.id)).toMatchObject({ deleted_at: null })
   expect((await client.admin.stats()).users.total).toBeGreaterThanOrEqual(2)
   const regular = await ctx.createUser()
-  const unauthorized = browserClient()
-  await unauthorized.auth.login({ email: regular.email, password: PASSWORD })
+  const unauthorized = browserClient(await ctx.login(regular.email))
   await expect(unauthorized.admin.users.list()).rejects.toMatchObject({ status: 403 })
 })
 
 it('creates shared collections and scoped tokens, and transfers ownership through the client', async () => {
   const owner = await ctx.createUser()
   const member = await ctx.createUser()
-  const client = browserClient()
-  await client.auth.login({ email: owner.email, password: PASSWORD })
+  const client = browserClient(await ctx.login(owner.email))
   const collection = await client.collections.create({ name: 'Team quotes' })
   expect(await client.collections.update(collection.id, { name: 'Renamed team' })).toMatchObject({
     name: 'Renamed team',

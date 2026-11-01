@@ -26,10 +26,13 @@ jobs:
       - name: Frontend sites
         env:
           DOMAIN: ${{ vars.DOMAIN }}
+          ADMIN_HOST: ${{ vars.ADMIN_HOST || secrets.ADMIN_HOST }}
         run: |
           for host in "$DOMAIN" "app.$DOMAIN" "admin.$DOMAIN"; do
             curl -fsS --max-time 10 -o /dev/null "https://$host/"
           done
+          status=$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$ADMIN_HOST/")
+          [[ "$status" == 302 || "$status" == 303 || "$status" == 403 ]]
 
   server:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 7 * * *'

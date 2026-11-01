@@ -74,7 +74,7 @@ it('rejects ordinary users and tokens on every collection administration endpoin
   ]
   for (const operation of operations) {
     expect((await ctx.request({ ...operation, cookie: owner.cookie })).statusCode).toBe(403)
-    expect((await ctx.request({ ...operation, token: token.token })).statusCode).toBe(403)
+    expect((await ctx.request({ ...operation, token: token.token })).statusCode).toBe(401)
   }
   expect((await ctx.request({ method: 'GET', url, cookie: admin.cookie })).statusCode).toBe(200)
   // Normal app routes remain membership-scoped, even for site admins.

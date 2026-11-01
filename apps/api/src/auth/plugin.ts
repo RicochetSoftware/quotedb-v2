@@ -1,12 +1,14 @@
 import { isAdminRole, type Scope } from '@quotedb/shared'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
-import { apiTokens, sessions, type User } from '../db/schema'
+import { apiTokens, sessions, type User, users } from '../db/schema'
+import { createAccessVerifier } from './access'
 import { hasScope, verifyToken } from './api-token'
 import { findSession, SESSION_COOKIE } from './session'
 
 export type AuthContext =
+  | { kind: 'admin'; user: User }
   | { kind: 'session'; user: User; sessionId: string }
   | {
       kind: 'token'
@@ -37,6 +39,7 @@ export const authPlugin = fp(
     const allowedOrigins = new Set(
       [env.WEB_URL, env.ADMIN_URL, env.APP_URL].map((u) => new URL(u).origin),
     )
+    const verifyAccess = await createAccessVerifier(env)
     const tokenEnv = env.NODE_ENV === 'production' ? 'live' : 'test'
     const lastTouched = new Map<string, number>()
 
@@ -65,13 +68,38 @@ export const authPlugin = fp(
     app.addHook('onRequest', async (request) => {
       const authHeader = request.headers.authorization
       const rawCookie = request.cookies[SESSION_COOKIE]
-      const usesBearerOnly = !rawCookie && authHeader?.startsWith('Bearer ')
+      const adminRequest = /^\/api\/v1\/admin(?:\/|$)/.test(request.url.split('?')[0] ?? '')
+      const usesBearerOnly = !adminRequest && !rawCookie && authHeader?.startsWith('Bearer ')
 
       if (!SAFE_METHODS.has(request.method) && !usesBearerOnly) {
         const origin = originOf(request)
-        if (!origin || !allowedOrigins.has(origin)) {
+        if (
+          !origin ||
+          !allowedOrigins.has(origin) ||
+          (adminRequest && origin !== new URL(env.ADMIN_URL).origin)
+        ) {
           throw app.httpErrors.forbidden('Cross-site request blocked')
         }
+      }
+
+      if (adminRequest) {
+        if (request.method === 'OPTIONS') return
+        const assertion = request.headers['cf-access-jwt-assertion']
+        if (typeof assertion !== 'string')
+          throw app.httpErrors.unauthorized('Cloudflare Access authentication required')
+        let email: string
+        try {
+          email = await verifyAccess(assertion)
+        } catch {
+          throw app.httpErrors.unauthorized('Invalid Cloudflare Access token')
+        }
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(and(eq(users.email, email), isNull(users.deletedAt)))
+        if (!user || !isAdminRole(user.role)) throw app.httpErrors.forbidden('Admin role required')
+        request.auth = { kind: 'admin', user }
+        return
       }
 
       if (rawCookie) {
@@ -162,8 +190,8 @@ export const requireSession: Guard = async (request, reply) => {
 }
 
 export const requireAdmin: Guard = async (request, reply) => {
-  await requireSession(request, reply)
-  if (!request.auth?.user || !isAdminRole(request.auth.user.role)) {
+  await requireAuth(request, reply)
+  if (request.auth?.kind !== 'admin' || !isAdminRole(request.auth.user.role)) {
     throw request.server.httpErrors.forbidden('Admin role required')
   }
 }

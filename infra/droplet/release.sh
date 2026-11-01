@@ -5,6 +5,8 @@ stage=$PWD
 cd /opt/quotedb
 exec 9>.deploy.lock
 flock -w 600 9
+install -m 600 "$stage/admin-origin.crt" admin-origin.crt
+install -m 600 "$stage/admin-origin.key" admin-origin.key
 install -m 600 "$stage/api.env" api.env
 install -m 600 "$stage/postgres.env" postgres.env
 install -m 600 "$stage/.env" .env

@@ -27,6 +27,10 @@ run "all_hosts_on_one_droplet" {
   command = plan
   variables {
     domain                      = "quotes.elmu.dev"
+    cloudflare_account_id       = "test-account"
+    access_team                 = "quotedb-test"
+    admin_hostname              = "admin-quotes.elmu.dev"
+    admin_emails                = ["admin@example.com"]
     cloudflare_api_token        = "test-only"
     cloudflare_zone_id          = "test-zone"
     resend_api_key              = "test-only"
@@ -43,6 +47,10 @@ run "all_hosts_on_one_droplet" {
       alltrue([for r in cloudflare_dns_record.app_ipv6 : r.content == "2001:db8::10" && !r.proxied])
     )
     error_message = "All four hosts must use the same Droplet with DNS-only A and AAAA records."
+  }
+  assert {
+    condition     = cloudflare_dns_record.admin_access.proxied && cloudflare_dns_record.admin_access.name == "admin-quotes.elmu.dev" && cloudflare_zero_trust_access_application.admin.domain == "admin-quotes.elmu.dev" && cloudflare_zero_trust_access_application.admin.session_duration == "8h"
+    error_message = "The dedicated admin hostname must be proxied and protected by Access."
   }
   assert {
     condition = (

@@ -13,6 +13,7 @@ import {
   AdminUserListQuery,
   AdminUserUpdateBody,
   IdParams,
+  Me,
   OkResponse,
   QuoteList,
   type Role,
@@ -35,16 +36,25 @@ import {
 } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
 import { requireAdmin, userOf } from '../../auth/plugin'
-import { collectionMembers, collections, quotes, sessions, type User, users } from '../../db/schema'
-import { hashPassword } from '../../lib/passwords'
+import {
+  collectionMembers,
+  collections,
+  loginChallenges,
+  quotes,
+  sessions,
+  type User,
+  users,
+} from '../../db/schema'
+import { emailChangedEmail, inviteEmail } from '../../lib/emails'
 import {
   likeContains,
   parseBackdate,
   toAdminQuote,
   toAdminUser,
+  toMe,
   toQuote,
 } from '../../lib/serialize'
-import { issueResetToken } from '../auth/reset'
+import { consumeAuthBudget } from '../auth/codes'
 import { activeCollectionOwner, personalCollection } from '../collections/access'
 
 function statusCondition(column: PgColumn, status: StatusFilter = 'active'): SQL | undefined {
@@ -77,6 +87,20 @@ function assertCanManage(actor: User, target: User, change: { role?: Role; remov
 export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
   const { db } = app.ctx
   app.addHook('preHandler', requireAdmin)
+  async function sendInvite(user: User) {
+    if (
+      !(await consumeAuthBudget(db, [
+        { key: `invite:${user.id}`, max: 3, window: 60 * 60_000 },
+        { key: 'send:global', max: app.ctx.env.AUTH_EMAIL_HOURLY_LIMIT, window: 60 * 60_000 },
+      ]))
+    ) {
+      throw app.httpErrors.tooManyRequests('Too many invitation requests')
+    }
+    await app.ctx.mailer.send(inviteEmail(user.email, user.name, `${app.ctx.env.WEB_URL}/login`))
+  }
+  app.get('/admin/me', { schema: { tags: ['admin'], response: { 200: Me } } }, async (request) =>
+    toMe(userOf(request)),
+  )
 
   const quoteCount = sql<number>`(
     select count(*)::int from quotes q join collections c on c.id = q.collection_id
@@ -204,12 +228,9 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     { schema: { tags: ['admin'], body: AdminUserCreateBody, response: { 201: AdminUser } } },
     async (request, reply) => {
       const actor = userOf(request)
-      const { email, name, role = 'USER', password } = request.body
+      const { email, name, role = 'USER' } = request.body
       if (role === 'SUPER_ADMIN' && actor.role !== 'SUPER_ADMIN') {
         throw app.httpErrors.forbidden('Only a super admin can grant SUPER_ADMIN')
-      }
-      if (password && (await app.ctx.isBreached(password))) {
-        throw app.httpErrors.badRequest('This password has appeared in a known data breach')
       }
       let created: User | undefined
       try {
@@ -219,7 +240,6 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
             email: email.toLowerCase(),
             name,
             role,
-            passwordHash: password ? await hashPassword(password) : null,
           })
           .returning()
       } catch (err) {
@@ -228,7 +248,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
         throw err
       }
       if (!created) throw new Error('insert failed')
-      if (!password) await issueResetToken(app.ctx, created, 'invite')
+      await sendInvite(created)
       request.log.info(
         { audit: 'admin.user.create', actorId: actor.id, userId: created.id, role },
         'user created',
@@ -254,18 +274,30 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       if (problem) throw app.httpErrors.forbidden(problem)
       const { email, name, role } = request.body
       try {
-        await db
-          .update(users)
-          .set({
-            ...(email !== undefined && { email: email.toLowerCase() }),
-            ...(name !== undefined && { name }),
-            ...(role !== undefined && { role }),
-          })
-          .where(eq(users.id, target.id))
+        await db.transaction(async (tx) => {
+          await tx.select().from(users).where(eq(users.id, target.id)).for('update')
+          await tx
+            .update(users)
+            .set({
+              ...(email !== undefined && { email: email.toLowerCase() }),
+              ...(name !== undefined && { name }),
+              ...(role !== undefined && { role }),
+            })
+            .where(eq(users.id, target.id))
+          if (email !== undefined && email.toLowerCase() !== target.email.toLowerCase()) {
+            await tx.delete(sessions).where(eq(sessions.userId, target.id))
+            await tx.delete(loginChallenges).where(eq(loginChallenges.userId, target.id))
+          }
+        })
       } catch (err) {
         if (isUniqueViolation(err))
           throw app.httpErrors.conflict('A user with this email already exists')
         throw err
+      }
+      if (email !== undefined && email.toLowerCase() !== target.email.toLowerCase()) {
+        await app.ctx.mailer
+          .send(emailChangedEmail(target.email))
+          .catch(() => request.log.error('Email change notification failed'))
       }
       request.log.info(
         { audit: 'admin.user.update', actorId: actor.id, userId: target.id, changes: request.body },
@@ -303,6 +335,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       await db.transaction(async (tx) => {
         await tx.update(users).set({ deletedAt: new Date() }).where(eq(users.id, target.id))
         await tx.delete(sessions).where(eq(sessions.userId, target.id))
+        await tx.delete(loginChallenges).where(eq(loginChallenges.userId, target.id))
       })
       request.log.info(
         { audit: 'admin.user.delete', actorId: actor.id, userId: target.id },
@@ -330,7 +363,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
   )
 
   app.post(
-    '/admin/users/:id/password-reset',
+    '/admin/users/:id/invite',
     { schema: { tags: ['admin'], params: IdParams, response: { 200: OkResponse } } },
     async (request) => {
       const actor = userOf(request)
@@ -338,10 +371,10 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       const problem = assertCanManage(actor, target, {})
       if (problem) throw app.httpErrors.forbidden(problem)
       if (target.deletedAt) throw app.httpErrors.badRequest('Restore the user first')
-      await issueResetToken(app.ctx, target, target.passwordHash ? 'reset' : 'invite')
+      await sendInvite(target)
       request.log.info(
-        { audit: 'admin.user.password_reset', actorId: actor.id, userId: target.id },
-        'reset email sent',
+        { audit: 'admin.user.invite', actorId: actor.id, userId: target.id },
+        'invitation sent',
       )
       return { ok: true as const }
     },

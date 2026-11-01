@@ -1,4 +1,3 @@
-import { NewPassword } from '@quotedb/shared'
 import {
   Badge,
   Button,
@@ -7,26 +6,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Checkbox,
-  Field,
-  Input,
-  Label,
   relativeTime,
   toast,
-  typeboxResolver,
 } from '@quotedb/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller, useForm } from 'react-hook-form'
-import Type from 'typebox'
 import { api, errorMessage, meQuery, sessionsQuery } from '../api'
-
-const PasswordForm = Type.Object({
-  current_password: Type.String({ minLength: 1 }),
-  new_password: NewPassword,
-  confirm: Type.String({ minLength: 1 }),
-  revoke_other_sessions: Type.Boolean(),
-})
-type PasswordForm = Type.Static<typeof PasswordForm>
 
 export function AccountPage() {
   const { data: me } = useQuery(meQuery)
@@ -43,100 +27,8 @@ export function AccountPage() {
           {me && me.role !== 'USER' && <Badge variant="secondary">{me.role}</Badge>}
         </CardContent>
       </Card>
-      <ChangePasswordCard />
       <SessionsCard />
     </div>
-  )
-}
-
-function ChangePasswordCard() {
-  const queryClient = useQueryClient()
-  const form = useForm<PasswordForm>({
-    resolver: typeboxResolver(PasswordForm),
-    defaultValues: {
-      current_password: '',
-      new_password: '',
-      confirm: '',
-      revoke_other_sessions: true,
-    },
-  })
-  const { errors, isSubmitting } = form.formState
-
-  const onSubmit = form.handleSubmit(async ({ confirm, ...body }) => {
-    if (body.new_password !== confirm) {
-      form.setError('confirm', { message: "Passwords don't match" })
-      return
-    }
-    try {
-      await api.auth.changePassword(body)
-      toast.success('Password changed')
-      form.reset()
-      await queryClient.invalidateQueries({ queryKey: sessionsQuery.queryKey })
-    } catch (err) {
-      toast.error(errorMessage(err))
-    }
-  })
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Change password</CardTitle>
-        <CardDescription>
-          At least 12 characters. Passwords found in known data breaches are refused.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="grid max-w-sm gap-4" noValidate>
-          <Field
-            id="current_password"
-            label="Current password"
-            error={errors.current_password?.message}
-          >
-            <Input
-              id="current_password"
-              type="password"
-              autoComplete="current-password"
-              {...form.register('current_password')}
-            />
-          </Field>
-          <Field id="new_password" label="New password" error={errors.new_password?.message}>
-            <Input
-              id="new_password"
-              type="password"
-              autoComplete="new-password"
-              {...form.register('new_password')}
-            />
-          </Field>
-          <Field id="confirm" label="Confirm new password" error={errors.confirm?.message}>
-            <Input
-              id="confirm"
-              type="password"
-              autoComplete="new-password"
-              {...form.register('confirm')}
-            />
-          </Field>
-          <div className="flex items-center gap-2">
-            <Controller
-              control={form.control}
-              name="revoke_other_sessions"
-              render={({ field }) => (
-                <Checkbox
-                  id="revoke"
-                  checked={field.value}
-                  onCheckedChange={(v) => field.onChange(v === true)}
-                />
-              )}
-            />
-            <Label htmlFor="revoke" className="font-normal">
-              Sign out my other sessions
-            </Label>
-          </div>
-          <Button type="submit" className="w-fit" disabled={isSubmitting}>
-            Change password
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
   )
 }
 

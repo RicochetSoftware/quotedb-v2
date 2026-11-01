@@ -3,6 +3,11 @@
 # REGISTRY_USER / REGISTRY_TOKEN are optional for public images. Private images must use GHCR.
 set -euo pipefail
 [[ $# == 7 ]] || { echo "Usage: $0 SSH_TARGET API_IMAGE STATIC_IMAGE DOMAIN API_ENV POSTGRES_ENV KNOWN_HOSTS" >&2; exit 2; }
+admin_host=${ADMIN_HOST:?set ADMIN_HOST}
+admin_cert=${ADMIN_ORIGIN_CERT_FILE:?set ADMIN_ORIGIN_CERT_FILE}
+admin_key=${ADMIN_ORIGIN_KEY_FILE:?set ADMIN_ORIGIN_KEY_FILE}
+[[ -f $admin_cert && -f $admin_key ]] || { echo "Missing admin origin TLS files" >&2; exit 2; }
+[[ $admin_host =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+$ ]] || { echo "Invalid ADMIN_HOST" >&2; exit 2; }
 target=$1 api_image=$2 static_image=$3 domain=$4 api_env=$5 postgres_env=$6 known_hosts=$7
 # These values enter a Compose env file and the target enters SSH commands.
 [[ $target =~ ^[a-z_][a-z0-9_-]*@[0-9.]+$ ]] || { echo "Invalid SSH target" >&2; exit 2; }
@@ -44,9 +49,11 @@ remote 'sudo cloud-init status --wait >/dev/null'
 stage=$(remote 'umask 077; mktemp -d /opt/quotedb/.release.XXXXXXXX')
 [[ $stage =~ ^/opt/quotedb/\.release\.[a-zA-Z0-9]+$ ]] || { echo "Invalid staging path" >&2; exit 1; }
 scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$here/compose.bot.yaml" "$target:$stage/"
+remote "umask 077; cat > '$stage/admin-origin.crt'" < "$admin_cert"
+remote "umask 077; cat > '$stage/admin-origin.key'" < "$admin_key"
 remote "umask 077; cat > '$stage/api.env'" < "$api_env"
 remote "umask 077; cat > '$stage/postgres.env'" < "$postgres_env"
-printf "API_IMAGE='%s'\nSTATIC_IMAGE='%s'\nDOMAIN='%s'\n" "$api_image" "$static_image" "$domain" | remote "umask 077; cat > '$stage/.env'"
+printf "API_IMAGE='%s'\nSTATIC_IMAGE='%s'\nDOMAIN='%s'\nADMIN_HOST='%s'\n" "$api_image" "$static_image" "$domain" "$admin_host" | remote "umask 077; cat > '$stage/.env'"
 if [[ -n ${BOT_IMAGE:-} ]]; then
   remote "umask 077; cat > '$stage/bot.env'" < "$BOT_ENV_FILE"
   printf "BOT_IMAGE='%s'\nCOMPOSE_FILE='compose.yaml:compose.bot.yaml'\nCOMPOSE_PROFILES='discord'\n" "$BOT_IMAGE" | remote "cat >> '$stage/.env'"
@@ -71,3 +78,7 @@ for hostname in "api.$domain" "$domain" "app.$domain" "admin.$domain"; do
   [[ $healthy == true ]] || { echo "Health check failed: https://$hostname$path" >&2; exit 1; }
 done
 echo "Deployed configured QuoteDB services"
+
+# Access must challenge anonymous users; do not follow the login redirect.
+status=$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "https://$admin_host/")
+[[ $status == 302 || $status == 303 || $status == 403 ]] || { echo "Admin Access guard failed: HTTP $status" >&2; exit 1; }

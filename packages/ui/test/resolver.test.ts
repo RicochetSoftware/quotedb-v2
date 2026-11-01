@@ -1,4 +1,4 @@
-import { LoginBody, TokenCreateBody } from '@quotedb/shared'
+import { RequestCodeBody, TokenCreateBody } from '@quotedb/shared'
 import type { FieldValues, Resolver } from 'react-hook-form'
 import Type from 'typebox'
 import { describe, expect, it } from 'vitest'
@@ -9,16 +9,15 @@ const run = <V extends FieldValues>(resolver: Resolver<V>, values: Record<string
 
 describe('typeboxResolver', () => {
   it('passes valid values through', async () => {
-    const result = await run(typeboxResolver(LoginBody), { email: 'a@b.co', password: 'x' })
+    const result = await run(typeboxResolver(RequestCodeBody), { email: 'a@b.co' })
     expect(result.errors).toEqual({})
-    expect(result.values).toEqual({ email: 'a@b.co', password: 'x' })
+    expect(result.values).toEqual({ email: 'a@b.co' })
   })
 
   it('maps errors to fields with friendly messages', async () => {
-    const result = await run(typeboxResolver(LoginBody), { email: 'nope', password: '' })
+    const result = await run(typeboxResolver(RequestCodeBody), { email: 'nope' })
     expect(result.errors).toMatchObject({
       email: { message: 'Enter a valid email address' },
-      password: { message: 'Required' },
     })
   })
 

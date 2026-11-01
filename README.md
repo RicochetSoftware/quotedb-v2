@@ -31,7 +31,7 @@ pnpm db:migrate && pnpm db:seed
 pnpm dev
 ```
 
-Then sign in at http://localhost:5180 as `admin@quotedb.local` with password `quotedb-dev-password`. Password-reset and invite emails land in Mailpit.
+Then sign in at http://localhost:5180 as `izaro@quotedb.local` using an email code from Mailpit. Run `node scripts/admin-dev.mjs` and restart dev servers to enable local admin access. See [authentication and deployment](docs/AUTH.md).
 
 ## Checks
 

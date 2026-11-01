@@ -15,6 +15,13 @@
       "when": 1793548134703,
       "tag": "0001_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793562379240,
+      "tag": "0002_passwordless_auth",
+      "breakpoints": true
     }
   ]
 }

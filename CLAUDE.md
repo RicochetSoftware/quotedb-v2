@@ -8,9 +8,9 @@ QuoteDB v2: a TypeScript rewrite of the Laravel QuoteDB app (`../quotedb`). The 
 
 pnpm workspace:
 
-- `apps/api` — Fastify 5 + TypeBox 1.x + Drizzle + Postgres 17. Email/password login with opaque session cookies; feature-scoped personal access tokens. OpenAPI at `/api/documentation`.
+- `apps/api` — Fastify 5 + TypeBox 1.x + Drizzle + Postgres 17. Email-code login for existing/invited users with opaque session cookies; feature-scoped personal access tokens. OpenAPI at `/api/documentation`.
 - `apps/web` — user app (React 19, Vite 8, TanStack Router/Query, Tailwind 4, react-hook-form).
-- `apps/admin` — admin app, same stack, separate deploy at `admin.<domain>`; shares the session via an apex-scoped cookie.
+- `apps/admin` — admin app, same stack, separate deploy behind Cloudflare Access; requires a signed Access assertion and a local admin role.
 - `apps/site` — Astro static landing page.
 - `packages/shared` — TypeBox schemas, scope/role constants, typed API client. Used by the API *and* both frontends: change a schema here and both sides follow.
 - `packages/ui` — shadcn-style components, theme CSS, and `typeboxResolver` for react-hook-form.
@@ -36,7 +36,7 @@ pnpm test:e2e                 # Playwright; needs `docker compose up` Postgres
 pnpm build
 ```
 
-Seeded dev logins: `admin@quotedb.local` / `izaro@quotedb.local`, password `quotedb-dev-password`.
+Seeded web logins use email codes from Mailpit. Run `node scripts/admin-dev.mjs` for local signed-token admin access. See `docs/AUTH.md` for the authoritative current authentication design and deployment checklist.
 
 E2E on a machine without Chromium's system libraries (e.g. WSL without sudo): run the browser in Docker and point Playwright at it:
 
@@ -55,18 +55,18 @@ PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:3333/ PW_TEST_CONNECT_EXPOSE_NETWORK=
 ## API conventions
 
 - Identity comes from the auth context only (`request.auth`), never from body/path. `authOf(request)` inside guarded handlers.
-- Every route declares its guard: `requireScope('quotes:read')` (sessions pass, tokens need the scope), `requireSession` (tokens rejected: token management, password change, admin), `requireAdmin`.
+- Every route declares its guard: `requireScope('quotes:read')` (sessions pass, tokens need the scope), `requireSession` (web-only account/token management), `requireAdmin` (Access assertion plus local role).
 - Other users' resources are 404, not 403.
 - Request/response schemas come from `@quotedb/shared`; responses are serialized through them, so extra fields are stripped.
 - State-changing cookie requests must carry an allowed `Origin`/`Referer` (`WEB_URL`, `ADMIN_URL`, `APP_URL`). Bearer-only requests are exempt. Tests send `origin` by default via `ctx.request`.
-- Rate limits: 100/min keyed by token → user → IP; login 5/15 min per email; forgot-password 3/hour per email.
+- Rate limits: 100/min keyed by token → user → IP; persistent PostgreSQL email-code budgets; see `docs/AUTH.md`.
 - Never log secrets: log `token.prefix`, never the token; Pino redacts auth headers and cookies.
 - The app reads only the env contract in `apps/api/src/env.ts` — never platform-specific variables.
 
 ## Tests
 
 - API tests hit a real Postgres (Testcontainers), never mocks. `test/global-setup.ts` migrates a template DB once; `setupTestApp()` clones it per test file and returns helpers (`createUser`, `login`, `createToken`, `createQuote`, `request`).
-- Mail goes to an in-memory outbox (`ctx.mailer.outbox`); HIBP is stubbed (`ctx.setBreachChecker`).
+- Mail goes to an in-memory outbox (`ctx.mailer.outbox`); HIBP is stubbed (`ctx.setBreachChecker` (legacy helper retained during rollback window)).
 
 ## Style
 

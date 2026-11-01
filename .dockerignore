@@ -20,3 +20,8 @@ docs
 *.sql.gz
 
 **/*.dump
+
+.local
+
+**/admin-origin.crt
+**/admin-origin.key

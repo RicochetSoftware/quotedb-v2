@@ -21,8 +21,8 @@ it('accepts a same-site Referer but rejects missing and malformed CSRF provenanc
   ] as const) {
     const res = await ctx.request({
       method: 'POST',
-      url: '/api/v1/auth/login',
-      payload: { email: user.email, password: PASSWORD },
+      url: '/api/v1/auth/code/request',
+      payload: { email: user.email },
       headers: { origin: undefined, referer },
     })
     expect(res.statusCode).toBe(status)
@@ -63,13 +63,13 @@ it('keeps authentication available when session and token usage writes fail', as
   }
 })
 
-it('does not disclose password-reset mail delivery failures to the caller', async () => {
+it('does not disclose sign-in code mail delivery failures to the caller', async () => {
   const user = await ctx.createUser()
   vi.spyOn(ctx.mailer, 'send').mockRejectedValue(new Error('mail offline'))
   const warn = vi.spyOn(ctx.app.log, 'error')
   const res = await ctx.request({
     method: 'POST',
-    url: '/api/v1/auth/password/forgot',
+    url: '/api/v1/auth/code/request',
     payload: { email: user.email },
   })
   expect(res.statusCode).toBe(200)
@@ -100,7 +100,6 @@ it('enforces administrative account permissions and reports conflicting updates'
           email: 'promoted@example.test',
           name: 'Promoted',
           role: 'SUPER_ADMIN',
-          password: PASSWORD,
         },
       })
     ).statusCode,
@@ -148,11 +147,7 @@ it('returns internal errors for database write failures and remains usable after
   )
   try {
     for (const [method, url, payload] of [
-      [
-        'POST',
-        '/api/v1/admin/users',
-        { email: 'failed@example.test', name: 'Rejected write', password: PASSWORD },
-      ],
+      ['POST', '/api/v1/admin/users', { email: 'failed@example.test', name: 'Rejected write' }],
       ['PATCH', `/api/v1/admin/users/${target.id}`, { name: 'Rejected write' }],
     ] as const) {
       const res = await ctx.request({ method, url, cookie: admin.cookie, payload })
