@@ -113,7 +113,7 @@ Build the static image with `--build-arg DOMAIN=quotes.elmu.dev`; its API URLs a
 the browser bundles. Both images must target `linux/amd64`.
 
 A release waits for cloud-init, uploads files into a private staging directory, takes a remote
-lock, pulls images sequentially, starts PostgreSQL, takes a dump, runs migrations, and then
+lock, reuses one SSH connection to respect UFW rate limits, pulls images sequentially, starts PostgreSQL, takes a dump, runs migrations, and then
 replaces API/Caddy containers. A migration failure leaves the old application containers
 running, though schema changes may already have occurred. It checks HTTPS for all four hosts.
 Registry credentials are isolated to staging and removed when the release finishes.

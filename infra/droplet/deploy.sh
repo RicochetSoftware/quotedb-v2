@@ -12,10 +12,21 @@ for image in "$api_image" "$static_image"; do
 done
 [[ -z ${REGISTRY_TOKEN:-} || ${REGISTRY_USER:-} =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "Invalid registry user" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
-ssh_opts=(-o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o ConnectTimeout=20)
+control_dir=$(mktemp -d)
+stage=""
+# Reuse one TCP connection: UFW limits bursts of new SSH connections, including SCP.
+ssh_opts=(-o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o ConnectTimeout=20
+  -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$control_dir/%C"
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 # Arguments intentionally form the remote command; variable inputs are validated above.
 # shellcheck disable=SC2029
 remote() { ssh "${ssh_opts[@]}" "$target" "$@"; }
+cleanup() {
+  if [[ -n $stage ]]; then remote "find '$stage' -depth -delete" || true; fi
+  ssh "${ssh_opts[@]}" -O exit "$target" 2>/dev/null || true
+  rmdir "$control_dir" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 echo "Waiting for $target"
 for attempt in $(seq 1 30); do
@@ -28,8 +39,6 @@ remote 'sudo cloud-init status --wait >/dev/null'
 # one remote lock, so simultaneous manual/CI releases cannot mix their environments.
 stage=$(remote 'umask 077; mktemp -d /opt/quotedb/.release.XXXXXXXX')
 [[ $stage =~ ^/opt/quotedb/\.release\.[a-zA-Z0-9]+$ ]] || { echo "Invalid staging path" >&2; exit 1; }
-cleanup() { remote "find '$stage' -depth -delete" || true; }
-trap cleanup EXIT
 scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$target:$stage/"
 remote "umask 077; cat > '$stage/api.env'" < "$api_env"
 remote "umask 077; cat > '$stage/postgres.env'" < "$postgres_env"
