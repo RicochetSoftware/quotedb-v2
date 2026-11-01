@@ -36,10 +36,9 @@ import { allUsersQuery, api, errorMessage } from '../api'
 import { PageHeader, Pagination } from '../components/layout'
 import type { QuotesSearch } from '../router'
 
-const PAGE_SIZE = 25
-
 export function QuotesPage() {
   const search = useSearch({ from: '/authed/quotes' })
+  const pageSize = search.page_size ?? 25
   const navigate = useNavigate({ from: '/quotes' })
   const users = useQuery(allUsersQuery)
   const [q, setQ] = useState(search.q ?? '')
@@ -69,7 +68,7 @@ export function QuotesPage() {
 
   const quotes = useQuery({
     queryKey: ['admin', 'quotes', search],
-    queryFn: () => api.admin.quotes.list({ ...search, page_size: PAGE_SIZE }),
+    queryFn: () => api.admin.quotes.list({ ...search, page_size: pageSize }),
     placeholderData: keepPreviousData,
   })
 
@@ -87,7 +86,7 @@ export function QuotesPage() {
     setDeleting(true)
     const failed: string[] = []
     let failureMessage = ''
-    // A page has at most 25 rows. Sequential requests avoid a burst against API rate limits.
+    // A page has at most 100 rows. Sequential requests avoid a burst against API rate limits.
     for (const id of selected) {
       try {
         await api.admin.quotes.remove(id)
@@ -267,7 +266,9 @@ export function QuotesPage() {
           {quotes.data && (
             <Pagination
               page={quotes.data.page}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
+              disabled={deleting}
+              onPageSize={(size) => setSearch({ page_size: size === 25 ? undefined : size })}
               total={quotes.data.total}
               onPage={(page) =>
                 !deleting &&

@@ -23,10 +23,9 @@ import { api } from '../api'
 import { PageHeader, Pagination } from '../components/layout'
 import type { UsersSearch } from '../router'
 
-const PAGE_SIZE = 25
-
 export function UsersPage() {
   const search = useSearch({ from: '/authed/users' })
+  const pageSize = search.page_size ?? 25
   const navigate = useNavigate({ from: '/users' })
   const [q, setQ] = useState(search.q ?? '')
   const setSearch = (patch: Partial<UsersSearch>) =>
@@ -42,7 +41,7 @@ export function UsersPage() {
 
   const users = useQuery({
     queryKey: ['admin', 'users', search],
-    queryFn: () => api.admin.users.list({ ...search, page_size: PAGE_SIZE }),
+    queryFn: () => api.admin.users.list({ ...search, page_size: pageSize }),
     placeholderData: keepPreviousData,
   })
 
@@ -141,7 +140,8 @@ export function UsersPage() {
           {users.data && (
             <Pagination
               page={users.data.page}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
+              onPageSize={(size) => setSearch({ page_size: size === 25 ? undefined : size })}
               total={users.data.total}
               onPage={(page) =>
                 navigate({ search: (prev) => ({ ...prev, page: page > 1 ? page : undefined }) })

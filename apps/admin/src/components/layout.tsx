@@ -1,7 +1,8 @@
-import { Button, ThemeToggle, toast } from '@quotedb/ui'
+import { Button, NativeSelect, ThemeToggle, toast } from '@quotedb/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { LayoutDashboardIcon, QuoteIcon, ShieldIcon, UsersIcon } from 'lucide-react'
+import { useId } from 'react'
 import { api, errorMessage, meQuery, WEB_URL } from '../api'
 
 export function AdminLayout() {
@@ -87,26 +88,52 @@ export function Pagination({
   pageSize,
   total,
   onPage,
+  onPageSize,
+  disabled = false,
 }: {
   page: number
   pageSize: number
   total: number
   onPage: (page: number) => void
+  onPageSize: (size: number) => void
+  disabled?: boolean
 }) {
+  const pageSizeId = useId()
   const pages = Math.max(1, Math.ceil(total / pageSize))
   return (
-    <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
       <span>
         {total} total · page {page} of {pages}
       </span>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={pageSizeId} className="flex items-center gap-2">
+          Rows per page
+          <NativeSelect
+            id={pageSizeId}
+            className="w-auto"
+            value={pageSize}
+            disabled={disabled}
+            onChange={(event) => onPageSize(Number(event.target.value))}
+          >
+            {[25, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </NativeSelect>
+        </label>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={disabled || page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
           Previous
         </Button>
         <Button
           variant="outline"
           size="sm"
-          disabled={page >= pages}
+          disabled={disabled || page >= pages}
           onClick={() => onPage(page + 1)}
         >
           Next

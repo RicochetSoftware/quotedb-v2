@@ -22,6 +22,7 @@ const page = (v: unknown) => {
   const n = Number(v)
   return Number.isInteger(n) && n > 1 ? n : undefined
 }
+const pageSize = (v: unknown) => ([50, 100].includes(Number(v)) ? Number(v) : undefined)
 const status = (v: unknown): StatusFilter | undefined =>
   v === 'deleted' || v === 'all' ? v : undefined
 const role = (v: unknown): Role | undefined =>
@@ -76,12 +77,19 @@ export interface UsersSearch {
   role?: Role
   status?: StatusFilter
   page?: number
+  page_size?: number
 }
 const usersRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/users',
   validateSearch: (s): UsersSearch =>
-    compact({ q: str(s.q), role: role(s.role), status: status(s.status), page: page(s.page) }),
+    compact({
+      q: str(s.q),
+      role: role(s.role),
+      status: status(s.status),
+      page: page(s.page),
+      page_size: pageSize(s.page_size),
+    }),
   component: UsersPage,
 })
 const userNewRoute = createRoute({
@@ -103,6 +111,7 @@ export interface QuotesSearch {
   to?: string
   status?: StatusFilter
   page?: number
+  page_size?: number
 }
 const quotesRoute = createRoute({
   getParentRoute: () => authedRoute,
@@ -116,6 +125,7 @@ const quotesRoute = createRoute({
       to: str(s.to),
       status: status(s.status),
       page: page(s.page),
+      page_size: pageSize(s.page_size),
     }),
   component: QuotesPage,
 })

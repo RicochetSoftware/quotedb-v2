@@ -12,6 +12,10 @@ test('admin: log in, see the dashboard, edit a user', async ({ page }) => {
   await page.screenshot({ path: 'test-results/admin-dashboard.png', fullPage: true })
 
   await page.getByRole('link', { name: 'Users' }).click()
+  await page.getByLabel('Rows per page').selectOption('100')
+  await expect(page).toHaveURL(/page_size=100/)
+  await page.reload()
+  await expect(page.getByLabel('Rows per page')).toHaveValue('100')
   await page.getByRole('link', { name: USER.name }).click()
   await page.getByLabel('Name').fill('Renamed E2E User')
   await page.getByRole('button', { name: 'Save changes' }).click()
@@ -44,6 +48,20 @@ test('admin: select quotes, cancel, bulk delete, and restore', async ({ page }) 
     ids.push((await res.json()).id)
   }
   await page.getByRole('link', { name: 'Quotes', exact: true }).click()
+  await page.getByLabel('Rows per page').selectOption('50')
+  await expect(page).toHaveURL(/page_size=50/)
+  await page.evaluate(() => document.documentElement.classList.add('dark'))
+  await expect(page.getByLabel('Status', { exact: true })).toHaveCSS('color-scheme', 'dark')
+  const optionColors = await page
+    .getByLabel('Status', { exact: true })
+    .locator('option')
+    .first()
+    .evaluate((option) => {
+      const styles = getComputedStyle(option)
+      return { background: styles.backgroundColor, foreground: styles.color }
+    })
+  expect(optionColors.background).not.toBe(optionColors.foreground)
+  expect(optionColors.background).not.toBe('rgba(0, 0, 0, 0)')
   await page.getByLabel('Search quotes').fill('Bulk test')
   await expect(page.getByRole('link', { name: 'Bulk test first', exact: true })).toBeVisible()
   await page.getByRole('checkbox', { name: 'Select all active quotes on this page' }).check()

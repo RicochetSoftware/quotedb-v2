@@ -27,6 +27,14 @@ export function Textarea({ className, ...props }: React.ComponentProps<'textarea
 
 export function NativeSelect({ className, ...props }: React.ComponentProps<'select'>) {
   return (
-    <select data-slot="select" className={cn('h-9 pr-8', fieldClasses, className)} {...props} />
+    <select
+      data-slot="select"
+      className={cn(
+        'h-9 pr-8 [&_option]:bg-popover [&_option]:text-popover-foreground',
+        fieldClasses,
+        className,
+      )}
+      {...props}
+    />
   )
 }
