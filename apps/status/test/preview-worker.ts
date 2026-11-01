@@ -1,6 +1,7 @@
 // Disposable nonproduction harness. Never used by either production entrypoint.
 
 import type { Env } from '../src/env'
+import httpMonitor from '../src/http-monitor'
 import { authorized } from '../src/ingestion'
 import monitor, { evaluate } from '../src/monitor'
 import publicWorker, { publishSnapshot } from '../src/public'
@@ -10,7 +11,11 @@ export default {
     if (url.pathname === '/run') {
       if (!(await authorized(request, env.OPERATOR_SECRET)))
         return new Response(null, { status: 401 })
-      const { at, mode } = (await request.json()) as { at: number; mode: string }
+      const { at, mode, phase } = (await request.json()) as {
+        at: number
+        mode: string
+        phase?: string
+      }
       const root = 'https://quotedb-probe-fixture.elmukelmuz.workers.dev'
       const failed = mode === 'all-down'
       const targets = {
@@ -23,6 +28,12 @@ export default {
         ACCESS_CLIENT_SECRET: 'fixture',
         ADMIN_MONITOR_SECRET: 'fixture',
       }
+      if (phase === 'frontend' || phase === 'backend') {
+        // Use real Worker execution time for freshness; fixtures never enter production.
+        await httpMonitor.scheduled({} as ScheduledController, { ...targets, PROBE_PAIR: phase })
+        return new Response(null, { status: 204 })
+      }
+      if (phase === 'evaluate') targets.DISTRIBUTED_PROBES = 'true'
       await env.DB.prepare(
         `INSERT OR REPLACE INTO bot_heartbeats VALUES(1,'fixture',1,'fixture',?,?)`,
       )

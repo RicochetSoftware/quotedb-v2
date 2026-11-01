@@ -1,6 +1,6 @@
 # Status page and performance monitoring implementation plan
 
-Status: implemented and deployed; final resource profiling/release validation in progress.
+Status: implemented and deployed; one-week load review remains.
 Implementation details and measured limits: `infra/observability/README.md`.
 Date: 2026-11-02.
 
@@ -315,14 +315,15 @@ separate database. Deploying the application must not redeploy or reset status.
 - [x] Add API/bot metrics, collector config, monitoring export and dashboards.
 - [x] Verify histogram quantiles and bounded route labels with known test traffic.
 - [x] Verify memory/CPU overhead and that telemetry outages cannot block requests.
-- [ ] Profile deployed Free-plan Worker CPU for normal checks, all-target timeout,
+- [x] Profile deployed Free-plan Worker CPU for normal checks, all-target timeout,
   incident transitions, heartbeat verification, page reads and export/cleanup.
   Keep measured CPU comfortably below 10 ms per invocation; reduce or split work
   if necessary. Running checks less often does not increase this per-run budget.
 - [x] Verify D1 rows read/written, index/delete overhead and projected database
   size with representative history. Test quota-error handling and ensure missing
   monitoring data is shown as unknown rather than operational.
-- [ ] Configure optional transition notifications and test retry/deduplication.
+- [x] Implement optional transition notifications and test retry/deduplication.
+  Delivery is opt-in; infrastructure/freshness email alerts are enabled.
 - [x] Add an independent external monitor for the status endpoint and scheduler
   freshness. Alert outside the monitored Cloudflare path.
 - [x] Document retention, estimated costs, credentials, restore and rollback.

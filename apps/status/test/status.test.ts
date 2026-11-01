@@ -250,3 +250,22 @@ it('does not reuse distributed probes and makes stopped probe workers unknown', 
   expect((await loadStates(e)).find((s) => s.component === 'api')?.status).toBe('unknown')
   expect((await status(e, base + 120000)).stale).toBe(true)
 })
+
+it('exports current gauges before a stale metrics backlog', async () => {
+  const { deliver } = await import('../src/delivery')
+  const e = { ...env(), OTLP_URL: 'https://metrics.test/v1/metrics', OTLP_AUTH: 'Basic test' }
+  for (const id of ['metrics-100', 'metrics-101', 'metrics-102'])
+    await e.DB.prepare(
+      "INSERT INTO notification_outbox(id,kind,payload,next_retry) VALUES(?,'metrics','[]',0)",
+    )
+      .bind(id)
+      .run()
+  const send = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}')))
+  vi.stubGlobal('fetch', send)
+  await deliver(e, 1)
+  expect(send.mock.calls.map((call) => call[1].headers['Idempotency-Key'])).toEqual([
+    'metrics-102',
+    'metrics-101',
+  ])
+  vi.unstubAllGlobals()
+})

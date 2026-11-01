@@ -23,3 +23,11 @@ evaluations recover. The normal verification script checks those same hysteresis
 rules with HTTP errors and mixed red/yellow incidents.
 
 Remove the two disposable Workers and their D1 database after verification.
+
+For CPU profiling, use a fresh disposable database and tail the preview Worker.
+A `/run` body with `phase: "frontend"` or `phase: "backend"` invokes only the
+corresponding production probe pair and stages its results using real receipt time.
+`phase: "evaluate"` consumes those samples through the production distributed
+state engine. Use real `Date.now()` for `at` and wait for a new minute before the
+second evaluation; never reuse future-dated fixtures for this test. This catches
+runtime-only behavior that a local fetch mock cannot reproduce.

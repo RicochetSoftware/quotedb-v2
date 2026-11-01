@@ -71,7 +71,8 @@ Optional `ALERT_URL` and `ALERT_AUTH` enable a generic transition webhook. The
 receiver **must** honor `Idempotency-Key` / the payload's `id`: network timeouts
 make exactly-once delivery impossible otherwise. Transitions are grouped per
 minute; raw application errors/content are never included. Delivery retries six
-times with bounded exponential backoff. Failed deliveries log only category and
+times with bounded exponential backoff. Transition alerts keep FIFO priority;
+current metric gauges precede old backfill after an export outage. Failed deliveries log only category and
 attempt. Disabled notification delivery never prevents deployment or monitoring.
 
 Rotate bot secrets by setting `BOT_SECRET_PREVIOUS`, installing the new
@@ -238,3 +239,24 @@ Before removing infrastructure, export D1 and disable its cron jobs explicitly.
 The selected Grafana stack was on its existing Free Trial during setup. No paid
 upgrade was made. Confirm its post-trial Free retention and active-series allowance
 in the account portal during the one-week review.
+
+## Release evidence (2026-11-02)
+
+Production Cron CPU samples after splitting work: frontend 4–6 ms, backend 7–9 ms,
+state evaluation 2–4 ms, snapshot/retention 4–8 ms, exporter 7 ms; public HTTP reads
+0–4 ms and heartbeat verification 0–3 ms. Disposable paired timeout probes used
+1–3 ms CPU despite five seconds of network waiting; failed/incident evaluation
+used 4 ms. Early combined implementations exceeded 10 ms and were replaced.
+These are measured samples, not a guarantee for arbitrary future load. Keep the
+one-week review and account quota checks; no paid plan was enabled.
+
+The actual remote D1 rolling-day query read 43,446 rows for approximately 7,200
+samples. Compact steady evaluation wrote 25 rows/read 41. Local retained storage
+simulation measured 8.30 MiB including indexes. Production history began with real
+observations. The preview restore and outage tests used disposable data only.
+
+Both repository CI (including Playwright) and independent status deployment passed.
+The full application release restored ordinary GHCR image ownership and all five
+containers were healthy/running. The independent ops-check passed endpoint,
+freshness and shared Cloudflare quota checks. Four Grafana rules evaluated healthy;
+Grafana accepted the authorized email contact-point test.

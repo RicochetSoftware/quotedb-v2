@@ -51,8 +51,10 @@ export function otlp(rows: Measurement[]) {
   }
 }
 export async function deliver(env: Env, now: number) {
+  // Current gauges take precedence over backfill after an exporter outage.
+  // Transition alerts retain FIFO priority; no telemetry backlog delays them.
   const pending = await env.DB.prepare(
-    'SELECT id,kind,payload,attempts FROM notification_outbox WHERE delivered_at IS NULL AND next_retry<=? AND attempts<6 ORDER BY next_retry LIMIT 2',
+    "SELECT id,kind,payload,attempts FROM notification_outbox WHERE delivered_at IS NULL AND next_retry<=? AND attempts<6 ORDER BY CASE WHEN kind='alert' THEN 0 ELSE 1 END,CASE WHEN kind='alert' THEN next_retry END,id DESC LIMIT 2",
   )
     .bind(now)
     .all<{ id: string; kind: string; payload: string; attempts: number }>()
