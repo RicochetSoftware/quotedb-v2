@@ -56,7 +56,11 @@ export async function buildApp(options: BuildAppOptions) {
     contentSecurityPolicy: false,
     crossOriginResourcePolicy: { policy: 'same-site' },
   })
-  await app.register(cors, { origin: [env.WEB_URL, env.ADMIN_URL], credentials: true })
+  await app.register(cors, {
+    origin: [env.WEB_URL, env.ADMIN_URL],
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
   await app.register(cookie, { secret: env.COOKIE_SECRET })
   await app.register(authPlugin)
   await app.register(rateLimit, {
