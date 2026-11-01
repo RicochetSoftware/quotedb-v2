@@ -8,7 +8,7 @@ import { encrypt } from '../src/security/credentials.js'
 
 const env: Env = {
   token: 'discord-secret',
-  guildId: '123',
+  guildIds: ['123', '456'],
   key: randomBytes(32),
   databaseUrl: 'unused',
   apiUrl: 'https://api.example',
@@ -449,4 +449,25 @@ it('requires confirmation before enabling all channels', async () => {
   }
   await send(event('button', payload.components[0]?.components[0]?.data.custom_id ?? ''))
   expect(store.policy).toHaveBeenCalledWith('123', 'user', 'channels', { mode: 'all', ids: [] })
+})
+
+it('uses separate credentials for another allowed server', async () => {
+  settings = {
+    ...settings,
+    guild_id: '456',
+    credential: encrypt(env.key, '456', 'second-server-key'),
+  }
+  transport.mockResolvedValue(new Response(JSON.stringify({ quotes: [quote] }), { status: 200 }))
+  const interaction = event('slash', 'random', { guildId: '456' })
+  await send(interaction)
+  expect(store.get).toHaveBeenCalledWith('456')
+  expect(transport).toHaveBeenCalled()
+  const headers = new Headers(transport.mock.calls[0]?.[1]?.headers)
+  expect(headers.get('authorization')).toBe('Bearer second-server-key')
+})
+it('rejects commands and forms from servers outside the allowlist', async () => {
+  await send(event('slash', 'random', { guildId: '789' }))
+  await send(event('slash', 'create', { guildId: '789' }))
+  expect(store.get).not.toHaveBeenCalled()
+  expect(transport).not.toHaveBeenCalled()
 })

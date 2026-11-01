@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { commands } from '../src/commands/definitions.js'
+import { readGuildIds } from '../src/env.js'
 import { channelAllowed, creatorAllowed } from '../src/policies.js'
 import { renderQuotes } from '../src/presentation/quotes.js'
 import { decrypt, encrypt } from '../src/security/credentials.js'
@@ -40,4 +41,16 @@ it('renders bounded non-pinging previews and preserves complete text in an attac
 })
 it('registers izaro independently from quote and includes message capture', () => {
   expect(commands.map((c) => c.name)).toEqual(['quote', 'izaro', 'Save quote'])
+})
+
+it('parses multiple configured servers and retains the single-server fallback', () => {
+  expect(
+    readGuildIds({
+      DISCORD_GUILD_IDS: '1313595711220224020, 409042647416569866,1313595711220224020',
+    }),
+  ).toEqual(['1313595711220224020', '409042647416569866'])
+  expect(readGuildIds({ DISCORD_GUILD_ID: '1313595711220224020' })).toEqual(['1313595711220224020'])
+  expect(() => readGuildIds({ DISCORD_GUILD_IDS: '1313595711220224020,' })).toThrow()
+  expect(() => readGuildIds({ DISCORD_GUILD_IDS: 'bad' })).toThrow()
+  expect(() => readGuildIds({})).toThrow()
 })

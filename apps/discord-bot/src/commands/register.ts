@@ -1,14 +1,11 @@
 import { REST, Routes } from 'discord.js'
-import { required } from '../env.js'
+import { readGuildIds, required } from '../env.js'
 import { commands } from './definitions.js'
 
-await new REST()
-  .setToken(required('DISCORD_BOT_TOKEN'))
-  .put(
-    Routes.applicationGuildCommands(
-      required('DISCORD_APPLICATION_ID'),
-      required('DISCORD_GUILD_ID'),
-    ),
-    { body: commands },
-  )
-console.info('Registered QuoteDB guild commands')
+const rest = new REST().setToken(required('DISCORD_BOT_TOKEN'))
+for (const guildId of readGuildIds()) {
+  await rest.put(Routes.applicationGuildCommands(required('DISCORD_APPLICATION_ID'), guildId), {
+    body: commands,
+  })
+  console.info(`Registered QuoteDB commands in guild ${guildId}`)
+}

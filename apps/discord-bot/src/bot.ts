@@ -116,8 +116,8 @@ export function createBot(client: Client, env: Env, store: Store) {
     if (!admin(member)) throw new UserError('Only Discord administrators can change bot settings.')
   }
   async function context(guildId: string | null, userId: string) {
-    if (guildId !== env.guildId)
-      throw new UserError('This bot is only available in its configured server.')
+    if (!guildId || !env.guildIds.includes(guildId))
+      throw new UserError('This bot is only available in its configured servers.')
     const guild = await client.guilds.fetch(guildId)
     // Fetch current membership rather than trusting a stale modal or component payload.
     const member = await guild.members.fetch({ user: userId, force: true })
@@ -339,8 +339,8 @@ export function createBot(client: Client, env: Env, store: Store) {
     // Modal responses cannot be deferred. Use the interaction's member snapshot here;
     // the submit handler rechecks current permissions, policies, and configuration.
     if (modalCommand && interaction.isChatInputCommand()) {
-      if (interaction.guildId !== env.guildId)
-        throw new UserError('Use this command in the configured server.')
+      if (!interaction.guildId || !env.guildIds.includes(interaction.guildId))
+        throw new UserError('Use this command in a configured server.')
       if (interaction.options.getSubcommand() === 'setup') {
         if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator))
           throw new UserError('Only Discord administrators can change bot settings.')
@@ -679,7 +679,8 @@ export function createBot(client: Client, env: Env, store: Store) {
     async message(message: Message) {
       if (
         message.author.bot ||
-        message.guildId !== env.guildId ||
+        !message.guildId ||
+        !env.guildIds.includes(message.guildId) ||
         !client.user ||
         !message.mentions.users.has(client.user.id)
       )

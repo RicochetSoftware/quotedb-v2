@@ -35,10 +35,10 @@ process.once('SIGTERM', () => void shutdown())
 try {
   await store.health()
   // Fail before connecting if persisted credentials cannot be decrypted after a key change.
-  const settings = await store.get(env.guildId)
-  if (settings.credential) {
-    const { decrypt } = await import('./security/credentials.js')
-    decrypt(env.key, env.guildId, settings.credential)
+  const { decrypt } = await import('./security/credentials.js')
+  for (const guildId of env.guildIds) {
+    const settings = await store.get(guildId)
+    if (settings.credential) decrypt(env.key, guildId, settings.credential)
   }
   health.listen(8090, '127.0.0.1')
   await client.login(env.token)

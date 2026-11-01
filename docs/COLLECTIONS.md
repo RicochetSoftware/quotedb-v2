@@ -15,8 +15,7 @@ erDiagram
 ```
 
 Every user has one personal collection. Shared collections can have multiple members,
-with one owner. A guild connects to one shared collection; the current bot deployment
-still allows only its configured private guild. Different guilds could deliberately
+with one owner. A guild connects to one shared collection; the bot accepts only guilds listed in `DISCORD_GUILD_IDS`. Different guilds could deliberately
 connect to the same collection, but membership in Discord does not automatically grant
 website access. Discord members do not need QuoteDB accounts to use bot commands.
 

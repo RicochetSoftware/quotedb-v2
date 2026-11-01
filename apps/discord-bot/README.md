@@ -1,6 +1,6 @@
 # QuoteDB Discord bot
 
-One private Discord server connects to one shared QuoteDB collection. Members can retrieve and
+Each allowed Discord server connects to one shared QuoteDB collection. Members can retrieve and
 create quotes; Discord administrators manage collection keys, creator roles, and channels.
 The complete product/architecture plan is in [DISCORD_BOT_PLAN.md](../../docs/DISCORD_BOT_PLAN.md).
 
@@ -11,7 +11,7 @@ application installed in a test server.
 
 1. Copy the root `.env.example` to `.env` if needed. Configure the bot values without
    overwriting existing application configuration.
-2. Set `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, and `DISCORD_GUILD_ID`. Enable the
+2. Set `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, and `DISCORD_GUILD_IDS` (comma-separated server IDs). Enable the
    **Message Content Intent** in the Developer Portal for reply-based capture.
 3. Set `QUOTEDB_API_URL` to the local API and `QUOTEDB_PUBLIC_URL` to the user website.
 4. Set `BOT_DATABASE_URL` using the `quotedb_bot` username and a strong, URL-encoded
@@ -93,7 +93,13 @@ pnpm --filter @quotedb/discord-bot exec vitest run test/core.test.ts test/bot.te
 `start` runs the built output and expects environment variables to be supplied by
 the process/container. It does not load `.env`. Registration is an explicit command;
 it replaces this application's guild command definitions. The application ID and
-guild ID must belong to the intended bot/test server.
+guild IDs must belong to the intended servers. The bot must be invited before commands
+can be registered there; deployment itself does not require an invitation.
+
+To add a server, add its ID to `DISCORD_GUILD_IDS`, update the deployment configuration,
+and restart the bot. Invite it and rerun the registration command, then use `/quote setup`
+to connect a collection. Settings and encrypted credentials remain separate per server.
+The legacy `DISCORD_GUILD_ID` setting is used when `DISCORD_GUILD_IDS` is empty.
 
 The internal health endpoint listens only on `127.0.0.1:8090`, reports readiness for
 Discord/API/database, and is used by the container healthcheck.
