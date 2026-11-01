@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm'
 import { expect, it } from 'vitest'
+import { users } from '../src/db/schema'
 import { setupTestApp, userWithRole } from './helpers'
 
 const ctx = setupTestApp()
@@ -86,4 +88,47 @@ it('rejects ordinary users and tokens on every collection administration endpoin
       })
     ).statusCode,
   ).toBe(404)
+})
+
+it('hides collections owned by deleted users and restores visibility when the owner is restored', async () => {
+  const admin = await userWithRole(ctx, 'ADMIN')
+  const owner = await userWithRole(ctx, 'USER')
+  const target = await userWithRole(ctx, 'USER')
+  const url = `/api/v1/admin/collections/${owner.user.id}`
+  await ctx.request({ method: 'PATCH', url, cookie: admin.cookie, payload: { kind: 'shared' } })
+  await ctx.request({
+    method: 'PUT',
+    url: `${url}/members`,
+    cookie: admin.cookie,
+    payload: { email: target.user.email, role: 'member' },
+  })
+  const list = async (path: string, cookie: string) =>
+    (await ctx.request({ method: 'GET', url: `/api/v1/${path}`, cookie })).json().collections as {
+      id: string
+    }[]
+  await ctx.db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, owner.user.id))
+  expect((await list('admin/collections', admin.cookie)).some((c) => c.id === owner.user.id)).toBe(
+    false,
+  )
+  expect((await list('collections', target.cookie)).some((c) => c.id === owner.user.id)).toBe(false)
+  await ctx.db.update(users).set({ deletedAt: null }).where(eq(users.id, owner.user.id))
+  expect((await list('admin/collections', admin.cookie)).some((c) => c.id === owner.user.id)).toBe(
+    true,
+  )
+  await ctx.request({
+    method: 'POST',
+    url: `${url}/transfer`,
+    cookie: admin.cookie,
+    payload: { user_id: target.user.id },
+  })
+  await ctx.db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, owner.user.id))
+  // Transferred shared collections belong to the active new owner and remain visible.
+  expect((await list('admin/collections', admin.cookie)).some((c) => c.id === owner.user.id)).toBe(
+    true,
+  )
+  const personal = await userWithRole(ctx, 'USER')
+  await ctx.db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, personal.user.id))
+  expect(
+    (await list('admin/collections', admin.cookie)).some((c) => c.id === personal.user.id),
+  ).toBe(false)
 })

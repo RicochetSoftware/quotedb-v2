@@ -45,7 +45,7 @@ import {
   toQuote,
 } from '../../lib/serialize'
 import { issueResetToken } from '../auth/reset'
-import { personalCollection } from '../collections/access'
+import { activeCollectionOwner, personalCollection } from '../collections/access'
 
 function statusCondition(column: PgColumn, status: StatusFilter = 'active'): SQL | undefined {
   if (status === 'active') return isNull(column)
@@ -373,6 +373,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       collections: await db
         .select({ id: collections.id, name: collections.name, kind: collections.kind })
         .from(collections)
+        .where(activeCollectionOwner())
         .orderBy(desc(collections.createdAt)),
     }),
   )

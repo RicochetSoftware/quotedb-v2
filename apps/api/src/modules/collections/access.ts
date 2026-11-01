@@ -1,5 +1,5 @@
 import type { CollectionRole } from '@quotedb/shared'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { FastifyRequest } from 'fastify'
 import { authOf } from '../../auth/plugin'
 import type { Db } from '../../db/client'
@@ -49,4 +49,14 @@ export async function collectionAccess(
   if (ranks[membership.role] < ranks[minimum])
     throw request.server.httpErrors.forbidden('Your collection role does not allow this action')
   return { collection, role: membership.role }
+}
+
+/** Collection visibility follows its current owner, not the original quote submitter. */
+export function activeCollectionOwner() {
+  return sql`exists (
+    select 1 from collection_members owner_member
+    join users collection_owner on collection_owner.id = owner_member.user_id
+    where owner_member.collection_id = ${collections.id}
+      and owner_member.role = 'owner' and collection_owner.deleted_at is null
+  )`
 }

@@ -14,7 +14,7 @@ import {
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { requireAdmin, requireSession, userOf } from '../../auth/plugin'
 import { collectionMembers, collections, users } from '../../db/schema'
-import { collectionAccess } from './access'
+import { activeCollectionOwner, collectionAccess } from './access'
 
 export const collectionRoutes: FastifyPluginAsyncTypebox<{ siteAdmin?: boolean }> = async (
   app,
@@ -62,7 +62,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox<{ siteAdmin?: boolean }
           .select({ collection: collections, role: collectionMembers.role })
           .from(collections)
           .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-          .where(eq(collectionMembers.userId, userOf(request).id))
+          .where(and(eq(collectionMembers.userId, userOf(request).id), activeCollectionOwner()))
           .orderBy(asc(collections.kind), asc(collections.createdAt))
         return {
           collections: rows.map(({ collection: c, role }) => ({
