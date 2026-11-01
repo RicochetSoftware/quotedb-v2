@@ -1,5 +1,10 @@
 # QuoteDB v2
 
+[![Build](https://github.com/RicochetSoftware/quotedb-v2/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/RicochetSoftware/quotedb-v2/actions/workflows/ci.yml)
+[![Unit-test line coverage](.github/badges/coverage.svg)](#checks)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Node.js: >=24](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](package.json)
+
 The Elmu Quote Database, rebuilt as a TypeScript monorepo: a Fastify API on Postgres, React apps for users and admins, an Astro landing page, and all of the hosting defined as code.
 
 | Package | What | Dev URL |
@@ -33,7 +38,22 @@ Then sign in at http://localhost:5180 as `admin@quotedb.local` with password `qu
 ```bash
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm test:e2e
+pnpm test:coverage                    # needs Docker; refreshes the coverage badge
 ```
+
+The build badge tracks CI on `master`, including browser tests. The coverage badge is a
+checked-in snapshot of combined unit/integration **line coverage**, weighted by executable
+lines across the API, Discord bot, shared package, and UI library. It excludes the web/admin
+apps, Astro site, infrastructure, and the bot's startup, migration, and command-registration
+entry points. Browser tests do not contribute to this percentage.
+
+Run `pnpm test:coverage` and commit `.github/badges/coverage.svg` to refresh the snapshot.
+CI runs the same command and uploads the current summaries and badge as the `unit-coverage`
+artifact on each run; it does not commit badge changes automatically.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
 
 ## Using the API from scripts
 

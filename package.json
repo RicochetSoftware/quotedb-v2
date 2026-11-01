@@ -1,6 +1,7 @@
 {
   "name": "quotedb",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.14.0",
   "engines": {
@@ -14,6 +15,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "pnpm --recursive --filter \"!@quotedb/e2e\" test",
+    "test:coverage": "pnpm --filter @quotedb/api --filter @quotedb/discord-bot --filter @quotedb/shared --filter @quotedb/ui exec vitest run --coverage --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=text --coverage.reporter=json-summary --coverage.reportsDirectory=coverage && node scripts/coverage-badge.mjs",
     "test:e2e": "pnpm --filter @quotedb/e2e test",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
