@@ -114,3 +114,41 @@ test('admin: select quotes, cancel, bulk delete, and restore', async ({ page }) 
   await page.getByRole('button', { name: 'Restore', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Restore', exact: true })).toHaveCount(0)
 })
+
+test('admin: convert another user’s collection and manage its members and owner', async ({
+  page,
+}) => {
+  await page.goto(`${ADMIN_URL}/login`)
+  await page.getByLabel('Email').fill(ADMIN.email)
+  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  const collectionOwner = { name: 'Collection Owner', email: 'collection-owner@e2e.local' }
+  const response = await page.request.post(`http://localhost:${API_PORT}/api/v1/admin/users`, {
+    headers: { origin: ADMIN_URL },
+    data: { ...collectionOwner, password: PASSWORD },
+  })
+  expect(response.status()).toBe(201)
+  const collection = await response.json()
+  await page.goto(`${ADMIN_URL}/collections/${collection.id}`)
+  await page.getByLabel('Name', { exact: true }).fill('Managed server')
+  await page.getByRole('button', { name: 'Save name' }).click()
+  await expect(page.getByRole('heading', { name: 'Managed server', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Convert to shared' }).click()
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(page.getByLabel('Existing account email')).toBeVisible()
+  await page.getByLabel('Existing account email').fill(ADMIN.email)
+  await page.getByLabel('Role', { exact: true }).selectOption('viewer')
+  await page.getByRole('button', { name: 'Add or update member' }).click()
+  await page.getByLabel(`Role for ${ADMIN.email}`).selectOption('admin')
+  await expect(page.getByLabel(`Role for ${ADMIN.email}`)).toHaveValue('admin')
+  const adminRow = page.getByRole('row').filter({ hasText: ADMIN.email })
+  await adminRow.getByRole('button', { name: 'Make owner' }).click()
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(adminRow.getByText('Owner', { exact: true })).toBeVisible()
+  const formerOwner = page.getByRole('row').filter({ hasText: collectionOwner.email })
+  await expect(formerOwner.getByLabel(`Role for ${collectionOwner.email}`)).toHaveValue('admin')
+  await formerOwner.getByRole('button', { name: 'Remove', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(formerOwner).toHaveCount(0)
+})

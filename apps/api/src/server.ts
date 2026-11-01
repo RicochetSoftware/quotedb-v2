@@ -106,6 +106,7 @@ export async function buildApp(options: BuildAppOptions) {
       await v1.register(authRoutes)
       await v1.register(quoteRoutes)
       await v1.register(collectionRoutes)
+      await v1.register(collectionRoutes, { prefix: '/admin', siteAdmin: true })
       await v1.register(tokenRoutes)
       await v1.register(publicRoutes)
       await v1.register(adminRoutes)

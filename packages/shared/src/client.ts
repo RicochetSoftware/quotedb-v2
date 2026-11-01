@@ -26,6 +26,7 @@ import type {
   CollectionList,
   CollectionMember,
   CollectionMemberBody,
+  CollectionSummary,
   CollectionUpdateBody,
 } from './schemas/collections'
 import type {
@@ -157,6 +158,19 @@ export function createApiClient({
       izaro: () => request<PublicQuote>('GET', '/public/izaro'),
     },
     admin: {
+      collection: {
+        get: (id: string) => request<CollectionSummary>('GET', `/admin/collections/${id}`),
+        update: (id: string, body: CollectionUpdateBody) =>
+          request<CollectionSummary>('PATCH', `/admin/collections/${id}`, { body }),
+        members: (id: string) =>
+          request<{ members: CollectionMember[] }>('GET', `/admin/collections/${id}/members`),
+        setMember: (id: string, body: CollectionMemberBody) =>
+          request<void>('PUT', `/admin/collections/${id}/members`, { body }),
+        removeMember: (id: string, userId: string) =>
+          request<void>('DELETE', `/admin/collections/${id}/members/${userId}`),
+        transfer: (id: string, userId: string) =>
+          request<void>('POST', `/admin/collections/${id}/transfer`, { body: { user_id: userId } }),
+      },
       collections: () => request<AdminCollectionList>('GET', '/admin/collections'),
       stats: () => request<AdminStats>('GET', '/admin/stats'),
       users: {

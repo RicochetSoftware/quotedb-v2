@@ -6,64 +6,105 @@ import {
   CollectionMemberBody,
   CollectionMemberList,
   CollectionMemberParams,
+  CollectionSummary,
   CollectionTransferBody,
   CollectionUpdateBody,
   IdParams,
 } from '@quotedb/shared'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import { requireSession, userOf } from '../../auth/plugin'
+import { requireAdmin, requireSession, userOf } from '../../auth/plugin'
 import { collectionMembers, collections, users } from '../../db/schema'
 import { collectionAccess } from './access'
 
-export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
+export const collectionRoutes: FastifyPluginAsyncTypebox<{ siteAdmin?: boolean }> = async (
+  app,
+  { siteAdmin = false },
+) => {
   const { db } = app.ctx
-  app.addHook('preHandler', requireSession)
+  app.addHook('preHandler', siteAdmin ? requireAdmin : requireSession)
+  // Administrative authority is confined to the separately guarded /admin routes.
+  async function resolveAccess(...args: Parameters<typeof collectionAccess>) {
+    if (!siteAdmin) return collectionAccess(...args)
+    const [request, id, , database = db] = args
+    if (!id) throw app.httpErrors.notFound('Collection not found')
+    const [collection] = await database.select().from(collections).where(eq(collections.id, id))
+    if (!collection) throw request.server.httpErrors.notFound('Collection not found')
+    return { collection, role: 'owner' as const }
+  }
+  if (siteAdmin)
+    app.addHook('onResponse', async (request, reply) => {
+      if (request.method !== 'GET' && reply.statusCode < 400)
+        request.log.info(
+          {
+            audit: 'admin.collection.change',
+            actorId: userOf(request).id,
+            collectionId: (request.params as { id?: string }).id,
+            action: request.routeOptions.url,
+            method: request.method,
+          },
+          'collection administration',
+        )
+    })
   app.get(
-    '/collections',
-    { schema: { tags: ['collections'], response: { 200: CollectionList } } },
+    '/collections/:id',
+    { schema: { tags: ['collections'], params: IdParams, response: { 200: CollectionSummary } } },
     async (request) => {
-      const rows = await db
-        .select({ collection: collections, role: collectionMembers.role })
-        .from(collections)
-        .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-        .where(eq(collectionMembers.userId, userOf(request).id))
-        .orderBy(asc(collections.kind), asc(collections.createdAt))
-      return {
-        collections: rows.map(({ collection: c, role }) => ({
-          id: c.id,
-          name: c.name,
-          kind: c.kind,
-          role,
-          created_at: c.createdAt.toISOString(),
-        })),
-      }
+      const { collection } = await resolveAccess(request, request.params.id, 'admin')
+      return { id: collection.id, name: collection.name, kind: collection.kind }
     },
   )
-  app.post(
-    '/collections',
-    {
-      schema: { tags: ['collections'], body: CollectionCreateBody, response: { 201: Collection } },
-    },
-    async (request, reply) => {
-      const name = request.body.name.trim()
-      if (!name) throw app.httpErrors.badRequest('Name must not be blank')
-      const collection = await db.transaction(async (tx) => {
-        const [c] = await tx.insert(collections).values({ name, kind: 'shared' }).returning()
-        if (!c) throw new Error('Collection insert failed')
-        await tx
-          .insert(collectionMembers)
-          .values({ collectionId: c.id, userId: userOf(request).id, role: 'owner' })
-        return c
-      })
-      return reply.code(201).send({
-        id: collection.id,
-        name,
-        kind: collection.kind,
-        role: 'owner' as const,
-        created_at: collection.createdAt.toISOString(),
-      })
-    },
-  )
+  if (!siteAdmin) {
+    app.get(
+      '/collections',
+      { schema: { tags: ['collections'], response: { 200: CollectionList } } },
+      async (request) => {
+        const rows = await db
+          .select({ collection: collections, role: collectionMembers.role })
+          .from(collections)
+          .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+          .where(eq(collectionMembers.userId, userOf(request).id))
+          .orderBy(asc(collections.kind), asc(collections.createdAt))
+        return {
+          collections: rows.map(({ collection: c, role }) => ({
+            id: c.id,
+            name: c.name,
+            kind: c.kind,
+            role,
+            created_at: c.createdAt.toISOString(),
+          })),
+        }
+      },
+    )
+    app.post(
+      '/collections',
+      {
+        schema: {
+          tags: ['collections'],
+          body: CollectionCreateBody,
+          response: { 201: Collection },
+        },
+      },
+      async (request, reply) => {
+        const name = request.body.name.trim()
+        if (!name) throw app.httpErrors.badRequest('Name must not be blank')
+        const collection = await db.transaction(async (tx) => {
+          const [c] = await tx.insert(collections).values({ name, kind: 'shared' }).returning()
+          if (!c) throw new Error('Collection insert failed')
+          await tx
+            .insert(collectionMembers)
+            .values({ collectionId: c.id, userId: userOf(request).id, role: 'owner' })
+          return c
+        })
+        return reply.code(201).send({
+          id: collection.id,
+          name,
+          kind: collection.kind,
+          role: 'owner' as const,
+          created_at: collection.createdAt.toISOString(),
+        })
+      },
+    )
+  }
   app.patch(
     '/collections/:id',
     {
@@ -71,11 +112,11 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
         tags: ['collections'],
         params: IdParams,
         body: CollectionUpdateBody,
-        response: { 200: Collection },
+        response: { 200: siteAdmin ? CollectionSummary : Collection },
       },
     },
     async (request) => {
-      const { collection, role } = await collectionAccess(request, request.params.id, 'admin')
+      const { collection, role } = await resolveAccess(request, request.params.id, 'admin')
       if (request.body.name !== undefined && !request.body.name.trim())
         throw app.httpErrors.badRequest('Name must not be blank')
       if (request.body.kind && role !== 'owner')
@@ -87,12 +128,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
           .where(eq(collections.id, collection.id))
           .for('update')
         if (!current) throw app.httpErrors.notFound()
-        await collectionAccess(
-          request,
-          request.params.id,
-          request.body.kind ? 'owner' : 'admin',
-          tx,
-        )
+        await resolveAccess(request, request.params.id, request.body.kind ? 'owner' : 'admin', tx)
         if (request.body.kind === 'shared' && current.kind === 'personal') {
           await tx
             .update(collections)
@@ -134,7 +170,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
       schema: { tags: ['collections'], params: IdParams, response: { 200: CollectionMemberList } },
     },
     async (request) => {
-      await collectionAccess(request, request.params.id, 'admin')
+      await resolveAccess(request, request.params.id, 'admin')
       const members = await db
         .select({
           user_id: users.id,
@@ -155,7 +191,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
       await db.transaction(async (tx) => {
         // Serialize membership changes and owner transfers for this collection.
         await tx.execute(sql`select id from collections where id=${request.params.id} for update`)
-        const access = await collectionAccess(request, request.params.id, 'admin', tx)
+        const access = await resolveAccess(request, request.params.id, 'admin', tx)
         if (access.collection.kind === 'personal')
           throw app.httpErrors.badRequest('Convert this collection to shared before adding members')
         const [target] = await tx
@@ -197,7 +233,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
     async (request, reply) => {
       await db.transaction(async (tx) => {
         await tx.execute(sql`select id from collections where id=${request.params.id} for update`)
-        const access = await collectionAccess(request, request.params.id, 'admin', tx)
+        const access = await resolveAccess(request, request.params.id, 'admin', tx)
         const [target] = await tx
           .select()
           .from(collectionMembers)
@@ -230,7 +266,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
     async (request, reply) => {
       await db.transaction(async (tx) => {
         await tx.execute(sql`select id from collections where id=${request.params.id} for update`)
-        const access = await collectionAccess(request, request.params.id, 'owner', tx)
+        const access = await resolveAccess(request, request.params.id, 'owner', tx)
         if (access.collection.kind !== 'shared')
           throw app.httpErrors.badRequest('Personal collections cannot be transferred')
         const [target] = await tx
@@ -245,14 +281,14 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
             ),
           )
         if (!target) throw app.httpErrors.notFound('Active collection member required')
-        if (request.body.user_id === userOf(request).id) return
+        if (target.collection_members.role === 'owner') return
         await tx
           .update(collectionMembers)
           .set({ role: 'admin' })
           .where(
             and(
               eq(collectionMembers.collectionId, request.params.id),
-              eq(collectionMembers.userId, userOf(request).id),
+              eq(collectionMembers.role, 'owner'),
             ),
           )
         await tx

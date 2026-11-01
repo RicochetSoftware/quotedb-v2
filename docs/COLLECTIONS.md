@@ -62,7 +62,11 @@ commands only offer creation. Keep bot tokens private and grant only needed scop
 The website’s collection picker controls the quotes and random pages and persists the
 selection per signed-in user. **Manage collections** creates or converts collections,
 manages existing accounts by email, transfers ownership, and issues/revokes integration
-tokens. The site admin quote table/editor now uses collections instead of user owners.
+tokens. Site administrators can also open **Admin → Collections → collection name**
+to rename, convert, add/update/remove members, and transfer ownership for any collection,
+without joining it. These operations use session-only `/api/v1/admin/collections/:id`
+routes with the same member/transfer suffixes and retain the one-owner rule.
+The site admin quote table/editor uses collections instead of user owners.
 
 Session-authenticated quote lists/random requests accept `collection_id` in the query;
 creation accepts it in the body. Omitting it selects the user’s personal collection.

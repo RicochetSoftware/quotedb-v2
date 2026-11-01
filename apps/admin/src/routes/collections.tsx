@@ -85,7 +85,15 @@ export function CollectionsPage() {
               <TableBody>
                 {filtered.map((collection) => (
                   <TableRow key={collection.id}>
-                    <TableCell className="font-medium">{collection.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        to="/collections/$id"
+                        params={{ id: collection.id }}
+                        className="hover:underline"
+                      >
+                        {collection.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={collection.kind === 'shared' ? 'secondary' : 'outline'}>
                         {collection.kind === 'shared' ? 'Shared' : 'Personal'}
