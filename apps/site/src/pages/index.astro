@@ -1,0 +1,54 @@
+---
+import Base from '../layouts/Base.astro'
+
+const appUrl = import.meta.env.PUBLIC_WEB_URL ?? 'http://localhost:5180'
+const year = new Date().getFullYear()
+---
+
+<Base title="Elmu Quote Database">
+  <main class="mx-auto flex min-h-svh max-w-3xl flex-col px-6">
+    <header class="flex items-center justify-between py-6">
+      <span class="font-semibold">Elmu Quote Database</span>
+      <a href={`${appUrl}/login`} class="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white">Log in</a>
+    </header>
+
+    <section class="flex flex-1 flex-col justify-center gap-8 py-16">
+      <h1 class="text-4xl font-semibold tracking-tight sm:text-6xl">
+        Every great line,<br />kept in one place.
+      </h1>
+      <p class="max-w-xl text-lg text-neutral-600 dark:text-neutral-400">
+        QuoteDB is a small, private home for the things your friends say. Add quotes as they happen, search
+        them later, pull a random one when the group chat goes quiet, or wire it into your own scripts with a
+        scoped API token.
+      </p>
+      <blockquote class="border-l-2 border-neutral-300 pl-4 text-neutral-500 italic dark:border-neutral-700">
+        “I will finish the quote db one day” — Elmu
+      </blockquote>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${appUrl}/quotes`} class="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">
+          Open the database
+        </a>
+        <a href={`${appUrl}/izaro`} class="rounded-md border border-neutral-300 px-5 py-2.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+          Random Izaro quote
+        </a>
+      </div>
+    </section>
+
+    <section class="grid gap-6 border-t border-neutral-200 py-12 sm:grid-cols-3 dark:border-neutral-800">
+      <div>
+        <h2 class="font-semibold">Private by default</h2>
+        <p class="mt-1 text-sm text-neutral-500">Accounts are invite-only. Your quotes are visible to you.</p>
+      </div>
+      <div>
+        <h2 class="font-semibold">Search &amp; shuffle</h2>
+        <p class="mt-1 text-sm text-neutral-500">Find any quote by text or author, or get a random one.</p>
+      </div>
+      <div>
+        <h2 class="font-semibold">Scoped API tokens</h2>
+        <p class="mt-1 text-sm text-neutral-500">Read-only or read-write tokens for bots and widgets.</p>
+      </div>
+    </section>
+
+    <footer class="py-8 text-center text-sm text-neutral-500">2023–{year} © Ricochet Software</footer>
+  </main>
+</Base>

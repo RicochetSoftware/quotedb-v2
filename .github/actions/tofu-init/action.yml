@@ -1,0 +1,25 @@
+# Install OpenTofu and init infra/terraform against the R2 state backend.
+# Callers provide the TF_VAR_* / AWS_* / DIGITALOCEAN_TOKEN env (see deploy.yml).
+name: tofu-init
+description: Set up OpenTofu and initialise infra/terraform
+
+inputs:
+  cloudflare-account-id:
+    description: Account that owns the R2 state bucket
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: opentofu/setup-opentofu@v2
+      with:
+        tofu_version: 1.13.2
+        tofu_wrapper: false
+    - name: Write backend.hcl
+      shell: bash
+      working-directory: infra/terraform
+      run: sed "s/<CLOUDFLARE_ACCOUNT_ID>/${{ inputs.cloudflare-account-id }}/" backend.hcl.example > backend.hcl
+    - name: tofu init
+      shell: bash
+      working-directory: infra/terraform
+      run: tofu init -input=false -backend-config=backend.hcl

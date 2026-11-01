@@ -1,0 +1,21 @@
+# Copy to backend.hcl (gitignored) and run: tofu init -backend-config=backend.hcl
+# Credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (an R2 API token
+# with Object Read & Write on this bucket only).
+bucket = "quotedb-tfstate"
+key    = "quotedb/terraform.tfstate"
+region = "auto"
+
+endpoints = {
+  s3 = "https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com"
+}
+
+# R2 is S3-compatible but not AWS: skip the AWS-only checks.
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+use_path_style              = true
+
+# Native S3 state locking (OpenTofu >= 1.10, uses conditional writes, which R2 supports).
+use_lockfile = true

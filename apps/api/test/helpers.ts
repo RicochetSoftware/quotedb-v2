@@ -1,0 +1,164 @@
+import { randomUUID } from 'node:crypto'
+import type { Role, Scope } from '@quotedb/shared'
+import type { LightMyRequestResponse } from 'fastify'
+import postgres from 'postgres'
+import { afterAll, beforeAll, inject } from 'vitest'
+import { createDb, type Db } from '../src/db/client'
+import { users } from '../src/db/schema'
+import { loadEnv } from '../src/env'
+import { createMemoryMailer } from '../src/lib/mailer'
+import { type BreachChecker, hashPassword, noBreachCheck } from '../src/lib/passwords'
+import { type App, buildApp } from '../src/server'
+
+export const WEB_ORIGIN = 'http://web.test'
+export const ADMIN_ORIGIN = 'http://admin.test'
+export const PASSWORD = 'correct horse battery staple'
+
+export interface RequestOptions {
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'
+  url: string
+  payload?: object
+  headers?: Record<string, string | undefined>
+  /** `qdb_session=…` as returned by `login()`. */
+  cookie?: string
+  /** A personal access token, sent as `Authorization: Bearer`. */
+  token?: string
+}
+
+export interface TestContext {
+  app: App
+  db: Db
+  mailer: ReturnType<typeof createMemoryMailer>
+  /** Swap the breach checker for a test. */
+  setBreachChecker(fn: BreachChecker): void
+  /** `app.inject` that sends a same-site Origin by default (like a browser on the web app). */
+  request(opts: RequestOptions): Promise<LightMyRequestResponse>
+  createUser(
+    overrides?: Partial<typeof users.$inferInsert> & { password?: string },
+  ): Promise<typeof users.$inferSelect>
+  login(email: string, password?: string): Promise<string>
+  createToken(
+    cookie: string,
+    scopes: Scope[],
+    extra?: Record<string, unknown>,
+  ): Promise<{ id: string; token: string }>
+  createQuote(cookie: string, body?: Record<string, unknown>): Promise<{ id: string }>
+}
+
+/** Fresh database + app per test file. Call at the top level of a test file. */
+export function setupTestApp(envOverrides: Record<string, string> = {}): TestContext {
+  const ctx = {} as TestContext
+  let close: () => Promise<void>
+  let breachChecker: BreachChecker = noBreachCheck
+  const dbName = `test_${randomUUID().replaceAll('-', '')}`
+
+  beforeAll(async () => {
+    const adminUrl = inject('pgAdminUrl')
+    const admin = postgres(adminUrl, { max: 1, onnotice: () => {} })
+    await admin.unsafe(`create database ${dbName} template ${inject('pgTemplate')}`)
+    await admin.end()
+    const url = new URL(adminUrl)
+    url.pathname = `/${dbName}`
+
+    const env = loadEnv({
+      NODE_ENV: 'test',
+      DATABASE_URL: url.toString(),
+      COOKIE_SECRET: 'test-cookie-secret-that-is-at-least-32-chars',
+      WEB_URL: WEB_ORIGIN,
+      ADMIN_URL: ADMIN_ORIGIN,
+      APP_URL: 'http://api.test',
+      HIBP_ENABLED: 'false',
+      ...envOverrides,
+    })
+    const created = createDb(env.DATABASE_URL, { max: 5 })
+    const mailer = createMemoryMailer()
+    const app = await buildApp({
+      env,
+      db: created.db,
+      mailer,
+      isBreached: (pw) => breachChecker(pw),
+      logger: false,
+    })
+    await app.ready()
+    close = async () => {
+      await app.close()
+      await created.close()
+    }
+
+    Object.assign(ctx, {
+      app,
+      db: created.db,
+      mailer,
+      setBreachChecker(fn: BreachChecker) {
+        breachChecker = fn
+      },
+      request({ cookie, token, headers, ...opts }) {
+        const merged: Record<string, unknown> = {
+          origin: WEB_ORIGIN,
+          ...(cookie ? { cookie } : {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...headers,
+        }
+        for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key]
+        return app.inject({ ...opts, headers: merged as Record<string, string> })
+      },
+      async createUser({ password = PASSWORD, ...overrides } = {}) {
+        const [user] = await created.db
+          .insert(users)
+          .values({
+            email: `user-${randomUUID().slice(0, 8)}@example.com`,
+            name: 'Test User',
+            passwordHash: await hashPassword(password),
+            ...overrides,
+          })
+          .returning()
+        if (!user) throw new Error('failed to create user')
+        return user
+      },
+      async login(email, password = PASSWORD) {
+        const res = await ctx.request({
+          method: 'POST',
+          url: '/api/v1/auth/login',
+          payload: { email, password },
+        })
+        if (res.statusCode !== 200) throw new Error(`login failed: ${res.statusCode} ${res.body}`)
+        const cookie = res.cookies.find((c) => c.name === 'qdb_session')
+        if (!cookie) throw new Error('no session cookie')
+        return `qdb_session=${cookie.value}`
+      },
+      async createToken(cookie, scopes, extra = {}) {
+        const res = await ctx.request({
+          method: 'POST',
+          url: '/api/v1/tokens',
+          cookie,
+          payload: { name: 'test token', scopes, ...extra },
+        })
+        if (res.statusCode !== 201)
+          throw new Error(`token create failed: ${res.statusCode} ${res.body}`)
+        return res.json()
+      },
+      async createQuote(cookie, body = {}) {
+        const res = await ctx.request({
+          method: 'POST',
+          url: '/api/v1/quotes',
+          cookie,
+          payload: { quote: 'To be or not to be', author: 'Hamlet', ...body },
+        })
+        if (res.statusCode !== 201)
+          throw new Error(`quote create failed: ${res.statusCode} ${res.body}`)
+        return res.json()
+      },
+    } satisfies Omit<TestContext, never>)
+  })
+
+  afterAll(async () => {
+    await close?.()
+  })
+
+  return ctx
+}
+
+export async function userWithRole(ctx: TestContext, role: Role) {
+  const user = await ctx.createUser({ role })
+  return { user, cookie: await ctx.login(user.email) }
+}

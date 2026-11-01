@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom"],
+    "types": ["node"]
+  },
+  "include": ["tests", "playwright.config.ts", "prepare-db.ts", "fixtures.ts"],
+  "references": [{ "path": "../apps/api" }]
+}

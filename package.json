@@ -1,0 +1,33 @@
+{
+  "name": "quotedb",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm --recursive --filter \"./apps/*\" build",
+    "typecheck": "tsc -b && pnpm --filter @quotedb/site check",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "pnpm --recursive --filter \"!@quotedb/e2e\" test",
+    "test:e2e": "pnpm --filter @quotedb/e2e test",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "prepare": "husky",
+    "db:migrate": "pnpm --filter @quotedb/api db:migrate",
+    "db:seed": "pnpm --filter @quotedb/api db:seed"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@types/node": "^24.19.2",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "typescript": "7.0.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,json,jsonc,css}": "biome check --write --no-errors-on-unmatched"
+  }
+}

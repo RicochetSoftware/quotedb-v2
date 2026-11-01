@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored). Tokens go in environment variables.
+domain             = "quotes.elmu.dev"
+cloudflare_zone_id = "replace-with-elmu-dev-zone-id"
+digitalocean_region = "fra1"
+droplet_size        = "s-1vcpu-1gb"
+# Optional, billed separately; local logical dumps alone do not survive losing the Droplet.
+droplet_backups = false
+ssh_public_keys = [
+  "ssh-ed25519 AAAA... quotedb-deploy",
+  "ssh-ed25519 AAAA... you@laptop",
+]
+# izaro_user_id = "2"
+# Resend domain verification records (use the actual values from Resend):
+# extra_dns_records = {
+#   resend_dkim = { type = "TXT", name = "resend._domainkey.quotes.elmu.dev", content = "p=..." }
+# }

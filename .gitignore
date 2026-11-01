@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.astro/
+coverage/
+*.tsbuildinfo
+.tsc/
+.env
+.env.*
+!.env.example
+!.env.deploy.example
+test-results/
+playwright-report/
+
+# OpenTofu
+.terraform/
+*.tfstate
+*.tfstate.*
+backend.hcl
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl.bak
+
+# Never commit database dumps (drizzle migrations under apps/api/drizzle are fine)
+*.sql.gz
+*.dump
+/*.sql

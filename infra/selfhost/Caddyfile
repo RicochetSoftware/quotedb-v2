@@ -1,0 +1,42 @@
+# Whole QuoteDB stack behind one Caddy with automatic TLS. Hosts are derived from $DOMAIN,
+# matching production: <domain> (site), app.<domain>, admin.<domain>, api.<domain>.
+(static_assets) {
+	encode zstd gzip
+	# Vite (/assets) and Astro (/_astro) emit content-hashed filenames.
+	@hashed path /assets/* /_astro/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header -Server
+}
+
+# SPA: unknown paths fall back to index.html (TanStack Router handles routing).
+(spa) {
+	import static_assets
+	try_files {path} /index.html
+	file_server
+}
+
+{$DOMAIN} {
+	root * /srv/site
+	import static_assets
+	try_files {path} {path}/ {path}.html
+	file_server
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+}
+
+app.{$DOMAIN} {
+	root * /srv/web
+	import spa
+}
+
+admin.{$DOMAIN} {
+	root * /srv/admin
+	import spa
+}
+
+api.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8080
+}

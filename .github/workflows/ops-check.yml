@@ -1,0 +1,61 @@
+# Alerts (via GitHub's failed-workflow emails) when production is down or its unattended upkeep
+# has stopped: stale OS updates, a reboot that never happened, a filling disk, a dead container.
+name: ops-check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # uptime
+    - cron: "40 7 * * *" # daily server check, after the 04:00 UTC reboot window
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  uptime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: API health
+        run: |
+          for _ in 1 2 3; do
+            curl -fsS --max-time 10 "https://api.${{ vars.DOMAIN }}/healthz" && exit 0
+            sleep 20
+          done
+          echo "::error::https://api.${{ vars.DOMAIN }}/healthz is failing"
+          exit 1
+      - name: Frontend sites
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: |
+          for host in "$DOMAIN" "app.$DOMAIN" "admin.$DOMAIN"; do
+            curl -fsS --max-time 10 -o /dev/null "https://$host/"
+          done
+
+  server:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 7 * * *'
+    runs-on: ubuntu-latest
+    environment: production
+    # `tofu output` only reads state: the backend credentials and the state passphrase suffice.
+    env:
+      TF_VAR_state_encryption_passphrase: ${{ secrets.TOFU_STATE_PASSPHRASE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/tofu-init
+        with:
+          cloudflare-account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Read target from state
+        id: target
+        working-directory: infra/terraform
+        run: |
+          echo "ssh=$(tofu output -raw api_ssh_target)" >> "$GITHUB_OUTPUT"
+          tofu output -raw api_ssh_known_hosts > "$RUNNER_TEMP/known_hosts"
+      - name: Check the server
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<<"$DEPLOY_SSH_KEY"
+          ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            "${{ steps.target.outputs.ssh }}" bash -s < infra/droplet/ops-check.sh
