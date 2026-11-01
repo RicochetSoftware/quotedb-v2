@@ -13,9 +13,6 @@ export const DateOrTimestamp = Type.Union([
 
 export const Email = Type.String({ format: 'email', maxLength: 254 })
 
-/** Policy for any password we set: min 12 chars, no composition rules (HIBP is checked server-side). */
-export const NewPassword = Type.String({ minLength: 12, maxLength: 256 })
-
 export const RoleSchema = Type.Union([
   Type.Literal('USER'),
   Type.Literal('ADMIN'),

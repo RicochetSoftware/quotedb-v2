@@ -16,7 +16,6 @@ beforeAll(async () => {
       COOKIE_SECRET: 'x'.repeat(32),
       WEB_URL: origins[0],
       ADMIN_URL: origins[1],
-      HIBP_ENABLED: 'false',
     }),
     db: database.db,
     mailer: createMemoryMailer(),

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { formatToken, parseToken } from '../src/auth/api-token'
 import { loadEnv } from '../src/env'
 import { base62ToUuid, uuidToBase62 } from '../src/lib/crypto'
-import { createHibpChecker } from '../src/lib/passwords'
 import { likeContains, parseBackdate } from '../src/lib/serialize'
 
 describe('token format', () => {
@@ -32,35 +31,12 @@ describe('env', () => {
     expect(env).toMatchObject({
       PORT: 8080,
       NODE_ENV: 'development',
-      HIBP_ENABLED: true,
       TRUST_PROXY: false,
     })
   })
 
   it('fails loudly on missing or invalid values', () => {
     expect(() => loadEnv({ COOKIE_SECRET: 'short' })).toThrow(/DATABASE_URL|COOKIE_SECRET/)
-  })
-})
-
-describe('HIBP check', () => {
-  it('sends only the 5-char prefix and matches the suffix', async () => {
-    // sha1("password") = 5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8
-    let requested = ''
-    const check = createHibpChecker({ warn: () => {} }, (async (url: string) => {
-      requested = url
-      return new Response(
-        '1E4C9B93F3F0682250B6CF8331B7EE68FD8:3861493\r\n0000000000000000000000000000000000:0',
-      )
-    }) as unknown as typeof fetch)
-    expect(await check('password')).toBe(true)
-    expect(requested).toBe('https://api.pwnedpasswords.com/range/5BAA6')
-  })
-
-  it('fails open when the API is down', async () => {
-    const check = createHibpChecker({ warn: () => {} }, (async () => {
-      throw new Error('offline')
-    }) as unknown as typeof fetch)
-    expect(await check('password')).toBe(false)
   })
 })
 

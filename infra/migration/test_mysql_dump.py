@@ -21,13 +21,22 @@ class ImportTests(unittest.TestCase):
         result = normalize(self.fixture())
         self.assertEqual(result['users'][0]['role'], 'SUPER_ADMIN')
         self.assertEqual(result['users'][0]['email'], 'user@example.com')
-        self.assertEqual(result['users'][0]['password_hash'], self.fixture()['users'][0][4])
+        self.assertNotIn('password_hash', result['users'][0])
+        self.assertNotIn(self.fixture()['users'][0][4], sql(result))
         self.assertEqual(result['quotes'][0]['updated_at'], result['quotes'][0]['created_at'])
         self.assertEqual(result['quotes'][0]['deleted_at'], '2021-01-01T12:00:00+00:00')
         generated = sql(result)
         self.assertIn('ACCESS EXCLUSIVE', generated)
         self.assertIn('EXCEPT ALL', generated)
         self.assertTrue(generated.endswith('COMMIT;\n'))
+
+    def test_discards_any_legacy_password(self):
+        for password in [None, '', 'obsolete-hash-format']:
+            source = self.fixture()
+            source['users'][0][4] = password
+            result = normalize(source)
+            self.assertNotIn('password_hash', result['users'][0])
+            self.assertNotIn('password_algo', result['users'][0])
 
     def test_reject_bad_relationship_and_duplicate_email(self):
         source = self.fixture()

@@ -111,16 +111,13 @@ Self-hosted production uses the same design. Configure ADMIN_HOST, CF_ACCESS_TEA
 AUTH_CODE_SECRET, and place `admin-origin.crt`/`admin-origin.key` beside the Compose file. The
 private key must be mode 600. Use the local development workflow for an offline local setup.
 
-## Rollback and later cleanup
+## Password removal
 
-Migration 0002 is additive. Existing web sessions survive; they no longer grant administrative
-access. Password hashes and old reset-token storage are retained for the initial rollback window,
-but no current route reads them for authentication. Legacy password helpers/dependencies remain
-until the follow-up cleanup; they are not a supported login fallback.
+Migration 0003 permanently drops `users.password_hash`, `users.password_algo`, and the
+`password_reset_tokens` table. Password hashing dependencies and HIBP checks are removed.
+Legacy MySQL imports discard passwords. Historical migration files remain so a fresh database
+can replay the migration history; the final schema contains no user password storage.
 
-Keep the pre-cutover API/static image pair and matching previous Compose/Caddy configuration.
-A rollback must restore the matching frontend build, admin hostname/routing, and deployment
-configuration, not just an API image. Old password accounts can then work again; accounts created
-after this release have no password and need an old-flow invitation if rolling back. Do not drop
-new tables or user data as part of rollback. After acceptance, remove retained password fields,
-reset tokens, password helpers/dependencies, and HIBP configuration in a separate migration.
+Password-era application releases are no longer compatible with this schema. Rollbacks must
+use a release compatible with the passwordless schema. Existing database backups can retain old
+hashes until their retention period expires; dropping live columns does not erase backups.

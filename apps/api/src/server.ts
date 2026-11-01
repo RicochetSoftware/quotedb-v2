@@ -14,7 +14,6 @@ import type { AppContext } from './context'
 import type { Db } from './db/client'
 import type { Env } from './env'
 import { createSmtpMailer, type Mailer } from './lib/mailer'
-import { type BreachChecker, createHibpChecker, noBreachCheck } from './lib/passwords'
 import { adminRoutes } from './modules/admin/routes'
 import { authRoutes } from './modules/auth/routes'
 import { collectionRoutes } from './modules/collections/routes'
@@ -26,7 +25,6 @@ export interface BuildAppOptions {
   env: Env
   db: Db
   mailer?: Mailer
-  isBreached?: BreachChecker
   logger?: FastifyServerOptions['logger']
 }
 
@@ -61,8 +59,6 @@ export async function buildApp(options: BuildAppOptions) {
     env,
     db,
     mailer: options.mailer ?? createSmtpMailer(env),
-    isBreached:
-      options.isBreached ?? (env.HIBP_ENABLED ? createHibpChecker(app.log) : noBreachCheck),
   }
   app.decorate('ctx', ctx)
 

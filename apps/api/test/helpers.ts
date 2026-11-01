@@ -10,12 +10,10 @@ import { createDb, type Db } from '../src/db/client'
 import { users } from '../src/db/schema'
 import { loadEnv } from '../src/env'
 import { createMemoryMailer } from '../src/lib/mailer'
-import { type BreachChecker, hashPassword, noBreachCheck } from '../src/lib/passwords'
 import { type App, buildApp } from '../src/server'
 
 export const WEB_ORIGIN = 'http://web.test'
 export const ADMIN_ORIGIN = 'http://admin.test'
-export const PASSWORD = 'correct horse battery staple'
 
 export interface RequestOptions {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'
@@ -32,14 +30,10 @@ export interface TestContext {
   app: App
   db: Db
   mailer: ReturnType<typeof createMemoryMailer>
-  /** Swap the breach checker for a test. */
-  setBreachChecker(fn: BreachChecker): void
   /** `app.inject` that sends a same-site Origin by default (like a browser on the web app). */
   request(opts: RequestOptions): Promise<LightMyRequestResponse>
-  createUser(
-    overrides?: Partial<typeof users.$inferInsert> & { password?: string },
-  ): Promise<typeof users.$inferSelect>
-  login(email: string, password?: string): Promise<string>
+  createUser(overrides?: Partial<typeof users.$inferInsert>): Promise<typeof users.$inferSelect>
+  login(email: string): Promise<string>
   adminAssertion(email: string, claims?: Record<string, unknown>): Promise<string>
   createToken(
     cookie: string,
@@ -55,7 +49,6 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
   const keys = generateKeyPairSync('rsa', { modulusLength: 2048 })
   const adminIdentities = new Map<string, string>()
   let close: () => Promise<void>
-  let breachChecker: BreachChecker = noBreachCheck
   const dbName = `test_${randomUUID().replaceAll('-', '')}`
 
   beforeAll(async () => {
@@ -73,7 +66,6 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
       WEB_URL: WEB_ORIGIN,
       ADMIN_URL: ADMIN_ORIGIN,
       APP_URL: 'http://api.test',
-      HIBP_ENABLED: 'false',
       CF_ACCESS_AUD: 'test-admin',
       ADMIN_DEV_PUBLIC_KEY: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
       ...envOverrides,
@@ -84,7 +76,6 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
       env,
       db: created.db,
       mailer,
-      isBreached: (pw) => breachChecker(pw),
       logger: false,
     })
     await app.ready()
@@ -97,9 +88,6 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
       app,
       db: created.db,
       mailer,
-      setBreachChecker(fn: BreachChecker) {
-        breachChecker = fn
-      },
       async request({ cookie, token, headers, ...opts }) {
         // Domain tests use both credentials from the fixture. Auth-boundary tests explicitly
         // suppress this header or use app.inject to exercise cookie-only requests.
@@ -118,13 +106,12 @@ export function setupTestApp(envOverrides: Record<string, string> = {}): TestCon
         for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key]
         return app.inject({ ...opts, headers: merged as Record<string, string> })
       },
-      async createUser({ password = PASSWORD, ...overrides } = {}) {
+      async createUser(overrides = {}) {
         const [user] = await created.db
           .insert(users)
           .values({
             email: `user-${randomUUID().slice(0, 8)}@example.com`,
             name: 'Test User',
-            passwordHash: await hashPassword(password),
             ...overrides,
           })
           .returning()

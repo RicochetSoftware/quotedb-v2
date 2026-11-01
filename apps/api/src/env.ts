@@ -30,7 +30,6 @@ export const EnvSchema = Type.Object({
   /** Used when RESEND_API_KEY is not set. Mailpit in dev: smtp://localhost:1025 */
   SMTP_URL: Type.String({ default: 'smtp://localhost:1025' }),
   RESEND_API_KEY: Type.Optional(Type.String()),
-  HIBP_ENABLED: Type.Optional(Bool),
   AUTH_CODE_SECRET: Type.Optional(Type.String({ minLength: 32 })),
   AUTH_EMAIL_HOURLY_LIMIT: Type.Integer({ minimum: 1, default: 1000 }),
   CF_ACCESS_TEAM: Type.Optional(Type.String({ pattern: '^[a-z0-9-]+$' })),
@@ -57,7 +56,6 @@ export interface Env {
   MAIL_FROM: string
   SMTP_URL: string
   RESEND_API_KEY: string | undefined
-  HIBP_ENABLED: boolean
   AUTH_CODE_SECRET: string
   AUTH_EMAIL_HOURLY_LIMIT: number
   CF_ACCESS_TEAM: string | undefined
@@ -95,7 +93,6 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     CF_ACCESS_AUD: env.CF_ACCESS_AUD,
     ADMIN_DEV_PUBLIC_KEY: env.ADMIN_DEV_PUBLIC_KEY,
     TRUST_PROXY: String(env.TRUST_PROXY ?? 'false') === 'true',
-    HIBP_ENABLED: String(env.HIBP_ENABLED ?? 'true') === 'true',
     COOKIE_DOMAIN: env.COOKIE_DOMAIN,
     RESEND_API_KEY: env.RESEND_API_KEY,
     IZARO_USER_ID: env.IZARO_USER_ID,

@@ -45,6 +45,11 @@ it('applies migrations from the CLI entrypoint and can safely reapply them', asy
     expect(log).toHaveBeenCalledWith('migrations applied')
     await runMigrations(url)
     const tables = await sql`select tablename from pg_tables where schemaname = 'public'`
+    expect(tables.map((row) => row.tablename)).not.toContain('password_reset_tokens')
+    const passwordColumns = await sql`select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'users'
+      and column_name in ('password_hash', 'password_algo')`
+    expect(passwordColumns).toEqual([])
     expect(tables.map((row) => row.tablename)).toEqual(
       expect.arrayContaining(['users', 'quotes', 'collections', 'api_tokens']),
     )
@@ -65,20 +70,17 @@ it('seeds usable development accounts once and refuses production or missing con
   vi.stubEnv('NODE_ENV', 'test')
   vi.spyOn(console, 'log').mockImplementation(() => {})
   await import('../src/db/seed')
-  const accounts = await sql`select id, email, password_hash, role from users order by email`
+  const accounts = await sql`select id, email, role from users order by email`
   expect(accounts.map((row) => [row.email, row.role])).toEqual([
     ['admin@quotedb.local', 'SUPER_ADMIN'],
     ['izaro@quotedb.local', 'USER'],
   ])
-  expect(accounts.every((account) => account.password_hash === null)).toBe(true)
   const originalQuotes = await sql`select id, collection_id from quotes order by id`
   expect(originalQuotes).toHaveLength(4)
   vi.resetModules()
   await import('../src/db/seed')
   expect(await sql`select id, collection_id from quotes order by id`).toEqual(originalQuotes)
-  expect(await sql`select id, email, password_hash, role from users order by email`).toEqual(
-    accounts,
-  )
+  expect(await sql`select id, email, role from users order by email`).toEqual(accounts)
 })
 
 it('keeps declared foreign-key targets and deletion rules aligned with the migrated database', async () => {
@@ -101,7 +103,6 @@ it('keeps declared foreign-key targets and deletion rules aligned with the migra
     schema.collectionMembers,
     schema.quotes,
     schema.sessions,
-    schema.passwordResetTokens,
     schema.loginChallenges,
     schema.apiTokens,
   ].flatMap((table) => {

@@ -8,7 +8,7 @@ RUN corepack enable
 WORKDIR /repo
 COPY . .
 # Only the API and its workspace dependencies (packages/shared); native builds are allowed via
-# pnpm-workspace.yaml `allowBuilds` (argon2, esbuild).
+# pnpm-workspace.yaml `allowBuilds` (esbuild).
 RUN pnpm install --frozen-lockfile --filter @quotedb/api...
 RUN pnpm --filter @quotedb/api build
 # Self-contained production install: dist/ + drizzle/ migrations + prod node_modules.

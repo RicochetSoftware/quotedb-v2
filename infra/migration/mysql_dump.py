@@ -107,7 +107,7 @@ def normalize(source):
                     item[key] = None
                 else:
                     item[key] = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=dt.timezone.utc).isoformat()
-            for key in (['name', 'email', 'password'] if table == 'users' else ['quote', 'author']):
+            for key in (['name', 'email'] if table == 'users' else ['quote', 'author']):
                 if not isinstance(row[key], str) or '\0' in row[key]:
                     raise ValueError('Invalid text field')
             if table == 'users':
@@ -115,9 +115,7 @@ def normalize(source):
                 if not email or email in emails:
                     raise ValueError('Empty or duplicate normalized email')
                 emails.add(email)
-                if not re.fullmatch(r'\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}', row['password']):
-                    raise ValueError('Unsupported password hash')
-                item.update(name=row['name'], email=email, password_hash=row['password'], password_algo='bcrypt-legacy', role=ROLES[row['role']])
+                item.update(name=row['name'], email=email, role=ROLES[row['role']])
             else:
                 if row['user_id'] not in {u['external_id'] for u in result['users']}:
                     raise ValueError('Quote owner missing from dump')
@@ -153,7 +151,7 @@ def sql(data):
         fields = {key: ('integer' if key in ('external_id', 'owner_external_id') else 'timestamptz' if key.endswith('_at') else 'text') for key in data[table][0]}
         definitions = ', '.join(f'{key} {kind}' for key, kind in fields.items())
         parts.append(f"CREATE TEMP TABLE source_{table} ON COMMIT DROP AS SELECT * FROM jsonb_to_recordset(convert_from(decode('{payload}', 'base64'), 'UTF8')::jsonb) AS x({definitions});")
-    parts.append('INSERT INTO users (external_id, created_at, updated_at, deleted_at, name, email, password_hash, password_algo, role) SELECT external_id, created_at, updated_at, deleted_at, name, email, password_hash, password_algo, role FROM source_users;')
+    parts.append('INSERT INTO users (external_id, created_at, updated_at, deleted_at, name, email, role) SELECT external_id, created_at, updated_at, deleted_at, name, email, role FROM source_users;')
     parts.append('INSERT INTO quotes (external_id, created_at, updated_at, deleted_at, quote, author, user_id, collection_id) SELECT q.external_id, q.created_at, q.updated_at, q.deleted_at, q.quote, q.author, u.id, c.id FROM source_quotes q JOIN users u ON u.external_id=q.owner_external_id JOIN collections c ON c.personal_owner_id=u.id;')
     # Compare every imported field in both directions before committing.
     for table in COLUMNS:

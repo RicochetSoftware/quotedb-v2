@@ -4,12 +4,11 @@ import { sql } from 'drizzle-orm'
 import type { FastifyRequest } from 'fastify'
 import { afterEach, expect, it, vi } from 'vitest'
 import { collectionAccess } from '../src/modules/collections/access'
-import { PASSWORD, setupTestApp, userWithRole, WEB_ORIGIN } from './helpers'
+import { setupTestApp, userWithRole, WEB_ORIGIN } from './helpers'
 
 const ctx = setupTestApp()
 afterEach(() => {
   vi.restoreAllMocks()
-  ctx.setBreachChecker(async () => false)
 })
 
 it('accepts a same-site Referer but rejects missing and malformed CSRF provenance', async () => {
@@ -104,14 +103,17 @@ it('enforces administrative account permissions and reports conflicting updates'
       })
     ).statusCode,
   ).toBe(403)
-  ctx.setBreachChecker(async () => true)
   expect(
     (
       await ctx.request({
         method: 'POST',
         url: '/api/v1/admin/users',
         cookie: admin.cookie,
-        payload: { email: 'breached@example.test', name: 'Breached', password: PASSWORD },
+        payload: {
+          email: 'breached@example.test',
+          name: 'Breached',
+          password: 'obsolete-password',
+        },
       })
     ).statusCode,
   ).toBe(400)

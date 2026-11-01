@@ -66,11 +66,6 @@ variable "izaro_collection_id" {
   default     = ""
 }
 
-variable "hibp_enabled" {
-  type    = bool
-  default = true
-}
-
 variable "log_level" {
   type    = string
   default = "info"

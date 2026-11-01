@@ -133,7 +133,7 @@ const contracts: Contract[] = [
     `/admin/users/${user}/restore`,
   ],
   [
-    'admin reset password',
+    'admin resend invitation',
     (c) => c.admin.users.invite(user),
     'POST',
     `/admin/users/${user}/invite`,

@@ -181,7 +181,7 @@ export function requireScope(scope: Scope): Guard {
   }
 }
 
-/** Routes tokens can never use: token management, password changes, admin. */
+/** Routes tokens can never use: token management, account sessions, admin. */
 export const requireSession: Guard = async (request, reply) => {
   await requireAuth(request, reply)
   if (request.auth?.kind !== 'session') {

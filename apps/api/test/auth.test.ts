@@ -32,7 +32,7 @@ const cookieFrom = (res: Awaited<ReturnType<typeof verify>>) =>
 
 describe('email-code authentication', () => {
   it('verifies an existing account without a password and creates an HttpOnly session', async () => {
-    const user = await ctx.createUser({ email: 'alice@example.com', passwordHash: null })
+    const user = await ctx.createUser({ email: 'alice@example.com' })
     const details = await challenge('ALICE@example.com')
     const res = await verify(details)
     expect(res.statusCode).toBe(200)

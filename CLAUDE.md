@@ -66,7 +66,7 @@ PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:3333/ PW_TEST_CONNECT_EXPOSE_NETWORK=
 ## Tests
 
 - API tests hit a real Postgres (Testcontainers), never mocks. `test/global-setup.ts` migrates a template DB once; `setupTestApp()` clones it per test file and returns helpers (`createUser`, `login`, `createToken`, `createQuote`, `request`).
-- Mail goes to an in-memory outbox (`ctx.mailer.outbox`); HIBP is stubbed (`ctx.setBreachChecker` (legacy helper retained during rollback window)).
+- Mail goes to an in-memory outbox (`ctx.mailer.outbox`).
 
 ## Style
 

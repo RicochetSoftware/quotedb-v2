@@ -24,17 +24,12 @@ const updatedAt = () =>
     .defaultNow()
     .$onUpdate(() => new Date())
 
-export const PASSWORD_ALGOS = ['argon2id', 'bcrypt-legacy'] as const
-
 export const users = pgTable(
   'users',
   {
     id: uuid().primaryKey().defaultRandom(),
     email: citext().notNull().unique(),
     name: text().notNull(),
-    /** argon2id (`$argon2id$…`) or a v1 bcrypt hash (`$2y$…`). Null for invited users until they set one. */
-    passwordHash: text(),
-    passwordAlgo: text({ enum: PASSWORD_ALGOS }).notNull().default('argon2id'),
     role: text({ enum: ROLES }).notNull().default('USER'),
     /** Legacy MySQL id (MIGRATION.md §4.2). */
     externalId: integer().unique(),
@@ -42,10 +37,7 @@ export const users = pgTable(
     updatedAt: updatedAt(),
     deletedAt: tz(),
   },
-  (t) => [
-    check('users_role_check', sql`${t.role} in ('USER', 'ADMIN', 'SUPER_ADMIN')`),
-    check('users_password_algo_check', sql`${t.passwordAlgo} in ('argon2id', 'bcrypt-legacy')`),
-  ],
+  (t) => [check('users_role_check', sql`${t.role} in ('USER', 'ADMIN', 'SUPER_ADMIN')`)],
 )
 
 export const collections = pgTable(
@@ -138,26 +130,6 @@ export const sessions = pgTable(
     ip: text(),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
-)
-
-export const RESET_PURPOSES = ['reset', 'invite'] as const
-
-export const passwordResetTokens = pgTable(
-  'password_reset_tokens',
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    userId: uuid()
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    /** sha256 of the token sent by email. */
-    tokenHash: text().notNull().unique(),
-    /** `invite` links are sent when an admin creates a user; they live longer than resets. */
-    purpose: text({ enum: RESET_PURPOSES }).notNull().default('reset'),
-    expiresAt: tz().notNull(),
-    consumedAt: tz(),
-    createdAt: createdAt(),
-  },
-  (t) => [index('password_reset_tokens_user_idx').on(t.userId)],
 )
 
 export const apiTokens = pgTable(
