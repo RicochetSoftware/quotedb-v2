@@ -4,6 +4,8 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,7 +29,7 @@ import {
 } from '@quotedb/ui'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { PlusIcon } from 'lucide-react'
+import { PlusIcon, TrashIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { allUsersQuery, api, errorMessage } from '../api'
@@ -43,8 +45,18 @@ export function QuotesPage() {
   const [q, setQ] = useState(search.q ?? '')
   const [author, setAuthor] = useState(search.author ?? '')
   const [importing, setImporting] = useState(false)
+  const queryClient = useQueryClient()
+  const selectionKey = JSON.stringify(search)
+  const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const setSearch = (patch: Partial<QuotesSearch>) =>
     navigate({ search: (prev) => ({ ...prev, page: undefined, ...patch }), replace: true })
+
+  useEffect(() => {
+    setSelection({ key: selectionKey, ids: [] })
+    setConfirmDelete(false)
+  }, [selectionKey])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -61,6 +73,37 @@ export function QuotesPage() {
     placeholderData: keepPreviousData,
   })
 
+  // Selection belongs only to the current page and filters, never to placeholder rows.
+  const selectable = quotes.isPlaceholderData
+    ? []
+    : (quotes.data?.quotes.filter((quote) => !quote.deleted_at).map((quote) => quote.id) ?? [])
+  const selected =
+    selection.key === selectionKey ? selection.ids.filter((id) => selectable.includes(id)) : []
+  const select = (ids: string[]) => setSelection({ key: selectionKey, ids })
+
+  const deleteSelected = async () => {
+    if (deleting || selected.length === 0) return
+    setConfirmDelete(false)
+    setDeleting(true)
+    const failed: string[] = []
+    let failureMessage = ''
+    // A page has at most 25 rows. Sequential requests avoid a burst against API rate limits.
+    for (const id of selected) {
+      try {
+        await api.admin.quotes.remove(id)
+      } catch (err) {
+        failed.push(id)
+        failureMessage = errorMessage(err)
+      }
+    }
+    select(failed)
+    const deleted = selected.length - failed.length
+    if (deleted) toast.success(`${deleted} ${deleted === 1 ? 'quote' : 'quotes'} deleted`)
+    if (failed.length) toast.error(`${failed.length} could not be deleted: ${failureMessage}`)
+    await queryClient.invalidateQueries({ queryKey: ['admin'] })
+    setDeleting(false)
+  }
+
   return (
     <>
       <PageHeader
@@ -73,7 +116,7 @@ export function QuotesPage() {
       />
       <Card className="py-4">
         <CardContent className="px-4">
-          <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+          <fieldset disabled={deleting} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
             <Input
               className="lg:col-span-2"
               placeholder="Search text…"
@@ -129,7 +172,22 @@ export function QuotesPage() {
                 onChange={(e) => setSearch({ to: e.target.value || undefined })}
               />
             </div>
-          </div>
+          </fieldset>
+          {selected.length > 0 && (
+            <div className="mb-4 flex items-center gap-3" aria-live="polite">
+              <span className="text-sm">{selected.length} selected on this page</span>
+              <Button
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(true)}
+              >
+                <TrashIcon /> {deleting ? 'Deleting…' : 'Delete selected'}
+              </Button>
+              <Button variant="outline" disabled={deleting} onClick={() => select([])}>
+                Clear selection
+              </Button>
+            </div>
+          )}
           {quotes.isPending ? (
             <Skeleton className="h-40" />
           ) : quotes.data?.quotes.length === 0 ? (
@@ -138,6 +196,20 @@ export function QuotesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      aria-label="Select all active quotes on this page"
+                      disabled={deleting || selectable.length === 0}
+                      checked={
+                        selected.length > 0 && selected.length === selectable.length
+                          ? true
+                          : selected.length > 0
+                            ? 'indeterminate'
+                            : false
+                      }
+                      onCheckedChange={(checked) => select(checked === true ? selectable : [])}
+                    />
+                  </TableHead>
                   <TableHead>Quote</TableHead>
                   <TableHead>Author</TableHead>
                   <TableHead>User</TableHead>
@@ -146,7 +218,24 @@ export function QuotesPage() {
               </TableHeader>
               <TableBody>
                 {quotes.data?.quotes.map((quote) => (
-                  <TableRow key={quote.id}>
+                  <TableRow
+                    key={quote.id}
+                    data-state={selected.includes(quote.id) ? 'selected' : undefined}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        aria-label={`Select quote: ${quote.quote}`}
+                        disabled={deleting || quotes.isPlaceholderData || !!quote.deleted_at}
+                        checked={selected.includes(quote.id)}
+                        onCheckedChange={(checked) =>
+                          select(
+                            checked === true
+                              ? [...selected, quote.id]
+                              : selected.filter((id) => id !== quote.id),
+                          )
+                        }
+                      />
+                    </TableCell>
                     <TableCell className="max-w-md">
                       <Link
                         to="/quotes/$id"
@@ -181,12 +270,22 @@ export function QuotesPage() {
               pageSize={PAGE_SIZE}
               total={quotes.data.total}
               onPage={(page) =>
+                !deleting &&
                 navigate({ search: (prev) => ({ ...prev, page: page > 1 ? page : undefined }) })
               }
             />
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${selected.length} selected ${selected.length === 1 ? 'quote' : 'quotes'}?`}
+        description="These quotes will be hidden from their owners. You can restore them from the Deleted view."
+        confirmLabel="Delete quotes"
+        destructive
+        onConfirm={() => void deleteSelected()}
+      />
       <ImportQuoteDialog
         open={importing}
         onClose={() => setImporting(false)}
