@@ -35,3 +35,8 @@ export const allUsersQuery = queryOptions({
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Something went wrong'
 }
+
+export const allCollectionsQuery = queryOptions({
+  queryKey: ['admin', 'collections'],
+  queryFn: () => api.admin.collections(),
+})

@@ -482,17 +482,33 @@ state or database data. Existing v1 MySQL data still requires the application mi
 The existing DB is MySQL. Target is Postgres. Volume is small, so a one-shot dump-and-load is fine.
 
 ### 4.1 Strategy
-1. **Snapshot prod MySQL** (mysqldump).
-2. **Run a Node script** (`scripts/migrate-from-mysql.ts` in `apps/api`) that:
-   - Connects to MySQL (read-only) and Postgres (target).
-   - For each row: assign a new UUID, preserve original integer ID in `external_id` (users + quotes).
-   - Map `users.role` text values directly; default unknown to `USER`.
-   - Preserve `created_at`, `updated_at`, `deleted_at`.
-   - **Carry password hashes verbatim** into `users.password_hash`, set `password_algo = 'bcrypt-legacy'`. Laravel produces `$2y$10$…` hashes which the Node `bcrypt` lib verifies natively. On the user's next successful login, the API rehashes to argon2id and updates `password_algo = 'argon2id'`. Within ~1 month of cutover everyone is upgraded; nobody resets.
-   - Lowercase emails on insert (citext doesn't strictly require it, but normalizes display).
-   - Skip `personal_access_tokens` from Sanctum — Sanctum hashes are not compatible with our token format; users re-issue from `/settings/tokens` after first login (default scope: `quotes:read`).
-   - Skip `cache`, `jobs`, `password_reset_tokens`, `sessions` Laravel tables (all transient).
-3. **Verify counts** post-migration: `users`, `quotes`, soft-deleted rows. Spot-check 5 random users by logging in with their existing password against staging.
+1. Use a UTC MySQL dump with the original Laravel schema.
+2. Run `python3 infra/migration/mysql_dump.py <dump.sql.gz> <private-output.sql>`.
+   The standard-library converter reads only `users` and `quotes`; it never executes
+   source SQL. The output contains private data and must stay outside the checkout.
+   - Generate UUIDs in PostgreSQL, retaining integer IDs in `external_id`.
+   - Map `user`, `admin`, `superadmin` to `USER`, `ADMIN`, `SUPER_ADMIN`; reject unknown roles.
+   - Preserve UTC timestamps and soft deletions. Missing `updated_at` falls back to `created_at`.
+   - Preserve bcrypt hashes verbatim with `password_algo = 'bcrypt-legacy'`.
+     Existing passwords remain usable; successful logins upgrade hashes to argon2id.
+   - Normalize emails to lowercase and preserve quote ownership through legacy IDs.
+   - Exclude old sessions, password-reset tokens, Sanctum tokens and unrelated tables.
+3. Take a production backup and copy it off the Droplet. Test against an isolated
+   PostgreSQL database with the production schema before applying to production.
+4. Apply with `psql -X -v ON_ERROR_STOP=1` through SSH, holding `.deploy.lock`.
+   The SQL requires empty target tables, locks them, and compares every imported
+   field in both directions before committing the transaction. Repeated imports fail.
+5. Verify counts, ownership, API health, and take a post-import backup. Remove the
+   temporary database and generated SQL. Unit tests: `python3 -m unittest discover -s infra/migration -v`.
+
+Production import completed on **1 November 2026** from
+`quotedb-prod-20261021-172749.sql.gz` (snapshot: 21 October 2026): **11 users and
+173 quotes**, no soft-deleted records and no orphan quotes. Three quotes (legacy
+IDs 9, 11, 89) had null update timestamps and used their creation timestamps.
+Source SHA-256: `721dba0988e9cdb62fde881f7b12c8a36cc4d73f5dfbcfbab880bf7f026a244e`.
+Both staging and production passed full-field comparisons; repeat-import rejection
+was tested in staging. Existing-user login still requires a manual check with a
+known password; no passwords were reset or emails sent by the import.
 
 ### 4.2 ID compatibility
 External consumers currently call `/api/v1/quotes/search/user/{id}` with integer IDs. Two options:
@@ -637,7 +653,7 @@ Estimate: ~3–4 focused weekends of work for one person. Each phase is independ
 
 ## 9. Implementation notes (Oct 2026)
 
-Phases 0–7 are implemented in this repo. Phase 8 (importing the prod MySQL data, cutover) is deliberately not done yet: the `scripts/migrate-from-mysql.ts` importer, its verification and the DNS cutover are still to come. Everything it needs exists: `external_id` columns, the `bcrypt-legacy` login path, legacy-id lookups in the back-compat shim and `IZARO_USER_ID`, with database imports run through SSH or inside containers on the Droplet.
+Phases 0–7 are implemented. Production hosting and DNS cutover are complete. The legacy users and quotes were imported and verified on 1 November 2026 (see §4.1). A manual existing-user login check and the post-cutover soak remain.
 
 ### Versions actually used
 Node 24, pnpm 12, TypeScript 7 (native), Fastify 5, TypeBox 1.x (the `typebox` package, not `@sinclair/typebox`), Drizzle 0.45, Vite 8, React 19, TanStack Router 1 / Query 5, Tailwind 4, Vitest 5, Astro 7, Playwright 1.64, Biome 2.6, OpenTofu 1.13 (DigitalOcean provider 2.106, Cloudflare 5.28).

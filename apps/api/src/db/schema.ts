@@ -6,8 +6,10 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 
@@ -46,13 +48,65 @@ export const users = pgTable(
   ],
 )
 
+export const collections = pgTable(
+  'collections',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    kind: text({ enum: ['personal', 'shared'] }).notNull(),
+    personalOwnerId: uuid()
+      .references(() => users.id, { onDelete: 'restrict' })
+      .unique(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check(
+      'collections_kind_check',
+      sql`(${t.kind} = 'personal' and ${t.personalOwnerId} is not null) or (${t.kind} = 'shared' and ${t.personalOwnerId} is null)`,
+    ),
+  ],
+)
+
+export const collectionMembers = pgTable(
+  'collection_members',
+  {
+    collectionId: uuid()
+      .notNull()
+      .references(() => collections.id, { onDelete: 'cascade' }),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    role: text({ enum: ['owner', 'admin', 'member', 'viewer'] }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.collectionId, t.userId] }),
+    check(
+      'collection_members_role_check',
+      sql`${t.role} in ('owner', 'admin', 'member', 'viewer')`,
+    ),
+    uniqueIndex('collection_one_owner_idx').on(t.collectionId).where(sql`${t.role} = 'owner'`),
+    index('collection_members_user_idx').on(t.userId),
+  ],
+)
+
 export const quotes = pgTable(
   'quotes',
   {
     id: uuid().primaryKey().defaultRandom(),
-    userId: uuid()
+    collectionId: uuid()
       .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
+      .references(() => collections.id, { onDelete: 'restrict' }),
+    // Legacy SQL column retained for migration compatibility; attribution only, never ownership.
+    createdByUserId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    source: text({ enum: ['web', 'api', 'discord'] })
+      .notNull()
+      .default('web'),
+    discordGuildId: text(),
+    discordSubmitterId: text(),
+    discordMessageId: text(),
+    discordAuthorId: text(),
     quote: text().notNull(),
     author: text().notNull(),
     externalId: integer().unique(),
@@ -62,8 +116,8 @@ export const quotes = pgTable(
   },
   (t) => [
     index('quotes_author_idx').on(t.author),
-    index('quotes_user_created_idx')
-      .on(t.userId, t.createdAt.desc())
+    index('quotes_collection_created_idx')
+      .on(t.collectionId, t.createdAt.desc(), t.id.desc())
       .where(sql`${t.deletedAt} is null`),
   ],
 )
@@ -110,9 +164,14 @@ export const apiTokens = pgTable(
   'api_tokens',
   {
     id: uuid().primaryKey().defaultRandom(),
-    userId: uuid()
+    kind: text({ enum: ['personal', 'collection'] })
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .default('personal'),
+    collectionId: uuid()
+      .notNull()
+      .references(() => collections.id, { onDelete: 'restrict' }),
+    userId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    issuedByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
     name: text().notNull(),
     /** `qdb_live_<id>` — safe to show in UI and logs. */
     prefix: text().notNull(),
@@ -125,9 +184,15 @@ export const apiTokens = pgTable(
     createdAt: createdAt(),
     revokedAt: tz(),
   },
-  (t) => [index('api_tokens_user_idx').on(t.userId)],
+  (t) => [
+    index('api_tokens_user_idx').on(t.userId),
+    index('api_tokens_collection_idx').on(t.collectionId),
+    check('api_tokens_kind_check', sql`${t.kind} in ('personal', 'collection')`),
+  ],
 )
 
 export type User = typeof users.$inferSelect
 export type QuoteRow = typeof quotes.$inferSelect
 export type ApiTokenRow = typeof apiTokens.$inferSelect
+
+export type CollectionRow = typeof collections.$inferSelect

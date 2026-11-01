@@ -43,6 +43,11 @@ health=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q ap
 
 pg_health=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q postgres)" 2>/dev/null || echo unknown)
 [[ $pg_health == healthy ]] || fail "postgres container is $pg_health"
+if docker compose config --services 2>/dev/null | grep -qx discord-bot; then
+  grep -qx discord-bot <<<"$running" || fail "discord-bot container is not running"
+  bot_health=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q discord-bot)" 2>/dev/null || echo unknown)
+  [[ $bot_health == healthy ]] || fail "discord-bot container is $bot_health"
+fi
 systemctl is-active --quiet quotedb-backup.timer || fail "database backup timer is inactive"
 latest_backup=$(find backups -maxdepth 1 -type f -name 'quotedb-*.dump' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d ' ' -f2-)
 if [[ -z $latest_backup ]]; then

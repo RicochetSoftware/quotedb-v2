@@ -5,6 +5,7 @@ coverage/
 *.tsbuildinfo
 .tsc/
 .env
+bot.env
 .env.*
 !.env.example
 !.env.deploy.example

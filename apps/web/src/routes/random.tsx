@@ -2,14 +2,16 @@ import { Button, EmptyState, Skeleton } from '@quotedb/ui'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ShuffleIcon } from 'lucide-react'
-import { api, meQuery } from '../api'
+import { api, errorMessage } from '../api'
+import { useCollection } from '../components/collections'
 import { QuoteText } from '../components/quote-card'
 
 export function RandomPage() {
-  const { data: me } = useQuery(meQuery)
+  const { collection } = useCollection()
   const random = useQuery({
-    queryKey: ['quotes', 'random'],
-    queryFn: () => api.quotes.random({ max: 1 }),
+    queryKey: ['quotes', 'random', collection?.id],
+    queryFn: () => api.quotes.random({ max: 1, collection_id: collection?.id }),
+    enabled: !!collection,
     staleTime: 0,
     gcTime: 0,
   })
@@ -19,6 +21,8 @@ export function RandomPage() {
     <section className="flex flex-col items-center gap-8 py-16">
       {random.isPending ? (
         <Skeleton className="h-24 w-full max-w-xl" />
+      ) : random.isError ? (
+        <EmptyState>{errorMessage(random.error)}</EmptyState>
       ) : quote ? (
         <QuoteText
           size="large"
@@ -26,7 +30,7 @@ export function RandomPage() {
           author={quote.author}
           meta={
             <span className="w-full">
-              Added by {me?.name} · {quote.date}
+              {quote.date} · {collection?.name}
             </span>
           }
         />
@@ -39,7 +43,11 @@ export function RandomPage() {
           .
         </EmptyState>
       )}
-      <Button variant="outline" onClick={() => random.refetch()} disabled={random.isFetching}>
+      <Button
+        variant="outline"
+        onClick={() => random.refetch()}
+        disabled={!collection || random.isFetching}
+      >
         <ShuffleIcon /> Another one
       </Button>
     </section>

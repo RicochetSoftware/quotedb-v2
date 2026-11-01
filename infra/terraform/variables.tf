@@ -60,6 +60,12 @@ variable "izaro_user_id" {
   default     = ""
 }
 
+variable "izaro_collection_id" {
+  description = "Collection UUID explicitly published by /izaro; takes precedence over izaro_user_id."
+  type        = string
+  default     = ""
+}
+
 variable "hibp_enabled" {
   type    = bool
   default = true

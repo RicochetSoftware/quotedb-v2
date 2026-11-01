@@ -17,6 +17,7 @@ import { createSmtpMailer, type Mailer } from './lib/mailer'
 import { type BreachChecker, createHibpChecker, noBreachCheck } from './lib/passwords'
 import { adminRoutes } from './modules/admin/routes'
 import { authRoutes } from './modules/auth/routes'
+import { collectionRoutes } from './modules/collections/routes'
 import { publicRoutes } from './modules/public/routes'
 import { quoteRoutes } from './modules/quotes/routes'
 import { tokenRoutes } from './modules/tokens/routes'
@@ -59,7 +60,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(cors, {
     origin: [env.WEB_URL, env.ADMIN_URL],
     credentials: true,
-    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   })
   await app.register(cookie, { secret: env.COOKIE_SECRET })
   await app.register(authPlugin)
@@ -104,6 +105,7 @@ export async function buildApp(options: BuildAppOptions) {
     async (v1) => {
       await v1.register(authRoutes)
       await v1.register(quoteRoutes)
+      await v1.register(collectionRoutes)
       await v1.register(tokenRoutes)
       await v1.register(publicRoutes)
       await v1.register(adminRoutes)

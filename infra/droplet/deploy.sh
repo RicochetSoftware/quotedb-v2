@@ -11,6 +11,10 @@ for image in "$api_image" "$static_image"; do
   [[ $image =~ ^ghcr\.io/[a-z0-9._/-]+(:[a-zA-Z0-9._-]+|@sha256:[a-f0-9]{64})$ ]] || { echo "Expected a tagged GHCR image or digest" >&2; exit 2; }
 done
 [[ -z ${REGISTRY_TOKEN:-} || ${REGISTRY_USER:-} =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "Invalid registry user" >&2; exit 2; }
+# Optional bot image and private environment file must be supplied together.
+if [[ -n ${BOT_IMAGE:-} || -n ${BOT_ENV_FILE:-} ]]; then
+  [[ ${BOT_IMAGE:-} =~ ^ghcr\.io/[a-z0-9._/-]+(:[a-zA-Z0-9._-]+|@sha256:[a-f0-9]{64})$ && -f ${BOT_ENV_FILE:-} ]] || { echo "Supply BOT_IMAGE and BOT_ENV_FILE together" >&2; exit 2; }
+fi
 here=$(cd "$(dirname "$0")" && pwd)
 control_dir=$(mktemp -d)
 stage=""
@@ -39,10 +43,14 @@ remote 'sudo cloud-init status --wait >/dev/null'
 # one remote lock, so simultaneous manual/CI releases cannot mix their environments.
 stage=$(remote 'umask 077; mktemp -d /opt/quotedb/.release.XXXXXXXX')
 [[ $stage =~ ^/opt/quotedb/\.release\.[a-zA-Z0-9]+$ ]] || { echo "Invalid staging path" >&2; exit 1; }
-scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$target:$stage/"
+scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$here/compose.bot.yaml" "$target:$stage/"
 remote "umask 077; cat > '$stage/api.env'" < "$api_env"
 remote "umask 077; cat > '$stage/postgres.env'" < "$postgres_env"
 printf "API_IMAGE='%s'\nSTATIC_IMAGE='%s'\nDOMAIN='%s'\n" "$api_image" "$static_image" "$domain" | remote "umask 077; cat > '$stage/.env'"
+if [[ -n ${BOT_IMAGE:-} ]]; then
+  remote "umask 077; cat > '$stage/bot.env'" < "$BOT_ENV_FILE"
+  printf "BOT_IMAGE='%s'\nCOMPOSE_FILE='compose.yaml:compose.bot.yaml'\nCOMPOSE_PROFILES='discord'\n" "$BOT_IMAGE" | remote "cat >> '$stage/.env'"
+fi
 if [[ -n ${REGISTRY_TOKEN:-} ]]; then
   remote "umask 077; cat > '$stage/registry-token'" <<<"$REGISTRY_TOKEN"
   remote "umask 077; cat > '$stage/registry-user'" <<<"$REGISTRY_USER"
@@ -62,4 +70,4 @@ for hostname in "api.$domain" "$domain" "app.$domain" "admin.$domain"; do
   done
   [[ $healthy == true ]] || { echo "Health check failed: https://$hostname$path" >&2; exit 1; }
 done
-echo "Deployed API and all frontend sites"
+echo "Deployed configured QuoteDB services"

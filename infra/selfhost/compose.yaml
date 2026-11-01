@@ -46,6 +46,7 @@ services:
       SMTP_URL: ${SMTP_URL:-smtp://localhost:1025}
       HIBP_ENABLED: ${HIBP_ENABLED:-true}
       IZARO_USER_ID: ${IZARO_USER_ID:-}
+      IZARO_COLLECTION_ID: ${IZARO_COLLECTION_ID:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 10s

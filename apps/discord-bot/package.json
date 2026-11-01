@@ -1,0 +1,31 @@
+{
+  "name": "@quotedb/discord-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "node build.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -b",
+    "register": "tsx --env-file-if-exists=../../.env src/commands/register.ts",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "discord.js": "14.27.0",
+    "@quotedb/shared": "workspace:*",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "tsx": "4.23.15",
+    "vitest": "5.0.5",
+    "@vitest/coverage-v8": "5.0.5",
+    "@testcontainers/postgresql": "12.2.1"
+  }
+}

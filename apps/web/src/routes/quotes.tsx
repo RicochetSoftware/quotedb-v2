@@ -16,29 +16,35 @@ import {
   toast,
   typeboxResolver,
 } from '@quotedb/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PencilIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { api, errorMessage, meQuery, quotesQuery } from '../api'
+import { api, errorMessage } from '../api'
+import { useCollection } from '../components/collections'
 import { QuoteText } from '../components/quote-card'
 
 export function QuotesPage() {
-  const { data: me } = useQuery(meQuery)
-  const quotes = useQuery(quotesQuery)
+  const { collection } = useCollection()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Quote | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Quote | null>(null)
-
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    const all = quotes.data?.quotes ?? []
-    if (!needle) return all
-    return all.filter(
-      (q) => q.quote.toLowerCase().includes(needle) || q.author.toLowerCase().includes(needle),
-    )
-  }, [quotes.data, search])
+  const quotes = useInfiniteQuery({
+    queryKey: ['quotes', collection?.id, search],
+    enabled: !!collection,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      api.quotes.list({
+        collection_id: collection?.id,
+        max: 50,
+        q: search || undefined,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (page) => page.next_cursor,
+  })
+  const filtered = quotes.data?.pages.flatMap((page) => page.quotes) ?? []
+  const canWrite = !!collection && collection.role !== 'viewer'
 
   const remove = useMutation({
     mutationFn: (id: string) => api.quotes.remove(id),
@@ -52,8 +58,10 @@ export function QuotesPage() {
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Your quotes</h1>
-        <Button onClick={() => setEditing('new')}>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {collection?.kind === 'personal' ? 'Your quotes' : (collection?.name ?? 'Quotes')}
+        </h1>
+        <Button disabled={!canWrite} onClick={() => setEditing('new')}>
           <PlusIcon /> Add quote
         </Button>
       </div>
@@ -90,7 +98,7 @@ export function QuotesPage() {
                 author={quote.author}
                 meta={
                   <span>
-                    · {quote.date} · added by {me?.name}
+                    · {quote.date} · {quote.source}
                   </span>
                 }
                 actions={
@@ -98,6 +106,7 @@ export function QuotesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      disabled={!canWrite}
                       aria-label="Edit quote"
                       onClick={() => setEditing(quote)}
                     >
@@ -106,6 +115,7 @@ export function QuotesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      disabled={!canWrite}
                       aria-label="Delete quote"
                       onClick={() => setDeleting(quote)}
                     >
@@ -120,11 +130,20 @@ export function QuotesPage() {
       )}
       {quotes.data && (
         <p className="text-sm text-muted-foreground">
-          {filtered.length} of {quotes.data.quotes.length} quotes
+          {filtered.length} {filtered.length === 1 ? 'quote' : 'quotes'} loaded
         </p>
       )}
 
-      <QuoteDialog quote={editing} onClose={() => setEditing(null)} />
+      {quotes.hasNextPage && (
+        <Button
+          variant="outline"
+          disabled={quotes.isFetchingNextPage}
+          onClick={() => void quotes.fetchNextPage()}
+        >
+          Load more
+        </Button>
+      )}
+      <QuoteDialog collectionId={collection?.id} quote={editing} onClose={() => setEditing(null)} />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
@@ -138,7 +157,15 @@ export function QuotesPage() {
   )
 }
 
-function QuoteDialog({ quote, onClose }: { quote: Quote | 'new' | null; onClose: () => void }) {
+function QuoteDialog({
+  quote,
+  onClose,
+  collectionId,
+}: {
+  quote: Quote | 'new' | null
+  onClose: () => void
+  collectionId?: string
+}) {
   const queryClient = useQueryClient()
   const isNew = quote === 'new'
   const existing = quote && quote !== 'new' ? quote : null
@@ -153,7 +180,10 @@ function QuoteDialog({ quote, onClose }: { quote: Quote | 'new' | null; onClose:
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       if (existing) await api.quotes.update(existing.id, values)
-      else await api.quotes.create(values)
+      else {
+        if (!collectionId) return
+        await api.quotes.create({ ...values, collection_id: collectionId })
+      }
       toast.success(existing ? 'Quote updated' : 'Quote added')
       await queryClient.invalidateQueries({ queryKey: ['quotes'] })
       form.reset()

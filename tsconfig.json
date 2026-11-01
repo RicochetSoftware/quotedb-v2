@@ -4,6 +4,7 @@
     { "path": "packages/shared" },
     { "path": "packages/ui" },
     { "path": "apps/api" },
+    { "path": "apps/discord-bot" },
     { "path": "apps/web" },
     { "path": "apps/admin" },
     { "path": "e2e" }

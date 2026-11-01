@@ -37,6 +37,7 @@ module "backend" {
       HIBP_ENABLED   = tostring(var.hibp_enabled)
     },
     var.izaro_user_id == "" ? {} : { IZARO_USER_ID = var.izaro_user_id },
+    var.izaro_collection_id == "" ? {} : { IZARO_COLLECTION_ID = var.izaro_collection_id },
   )
 }
 

@@ -1,4 +1,4 @@
-import type { AdminQuote, AdminUser, ApiToken, Me, Quote } from '@quotedb/shared'
+import type { AdminQuote, AdminUser, ApiToken, CollectionSummary, Me, Quote } from '@quotedb/shared'
 import type { ApiTokenRow, QuoteRow, User } from '../db/schema'
 
 const iso = (d: Date) => d.toISOString()
@@ -7,6 +7,9 @@ const isoOrNull = (d: Date | null) => (d ? d.toISOString() : null)
 export function toQuote(row: QuoteRow): Quote {
   return {
     id: row.id,
+    collection_id: row.collectionId,
+    created_by_user_id: row.createdByUserId,
+    source: row.source,
     quote: row.quote,
     author: row.author,
     date: iso(row.createdAt).slice(0, 10),
@@ -15,12 +18,17 @@ export function toQuote(row: QuoteRow): Quote {
   }
 }
 
-export function toAdminQuote(row: QuoteRow, user: Pick<User, 'id' | 'name' | 'email'>): AdminQuote {
+export function toAdminQuote(
+  row: QuoteRow,
+  user: Pick<User, 'id' | 'name' | 'email'> | null,
+  collection: CollectionSummary,
+): AdminQuote {
   return {
     ...toQuote(row),
     external_id: row.externalId,
     deleted_at: isoOrNull(row.deletedAt),
-    user: { id: user.id, name: user.name, email: user.email },
+    user: user ? { id: user.id, name: user.name, email: user.email } : null,
+    collection,
   }
 }
 
@@ -52,6 +60,8 @@ export function toAdminUser(user: User, quoteCount: number): AdminUser {
 
 export function toApiToken(row: ApiTokenRow): ApiToken {
   return {
+    kind: row.kind,
+    collection_id: row.collectionId,
     id: row.id,
     name: row.name,
     prefix: row.prefix,

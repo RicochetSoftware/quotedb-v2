@@ -1,0 +1,31 @@
+# Optional override: COMPOSE_FILE=compose.yaml:compose.bot.yaml, COMPOSE_PROFILES=discord
+services:
+  discord-bot:
+    image: ${BOT_IMAGE:?set BOT_IMAGE}
+    profiles: [discord]
+    restart: unless-stopped
+    env_file: bot.env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=128
+      QUOTEDB_API_URL: http://api:8080
+    mem_limit: 192m
+    memswap_limit: 256m
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  bot-migrate:
+    image: ${BOT_IMAGE:?set BOT_IMAGE}
+    profiles: [bot-tools]
+    env_file: [bot.env, api.env]
+    command: [node, dist/migrate.js]
+    mem_limit: 128m
+    memswap_limit: 192m

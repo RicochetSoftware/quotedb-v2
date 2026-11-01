@@ -10,7 +10,9 @@ export type AuthContext =
   | { kind: 'session'; user: User; sessionId: string }
   | {
       kind: 'token'
-      user: User
+      user: User | null
+      tokenKind: 'personal' | 'collection'
+      collectionId: string
       tokenId: string
       prefix: string
       scopes: Scope[]
@@ -101,6 +103,8 @@ export const authPlugin = fp(
         request.auth = {
           kind: 'token',
           user,
+          tokenKind: token.kind,
+          collectionId: token.collectionId,
           tokenId: token.id,
           prefix: token.prefix,
           scopes: token.scopes,
@@ -121,7 +125,7 @@ export const authPlugin = fp(
         request.log.info(
           {
             token: { id: request.auth.tokenId, prefix: request.auth.prefix },
-            userId: request.auth.user.id,
+            userId: request.auth.user?.id,
             route: request.routeOptions.url,
             status: reply.statusCode,
           },
@@ -159,7 +163,7 @@ export const requireSession: Guard = async (request, reply) => {
 
 export const requireAdmin: Guard = async (request, reply) => {
   await requireSession(request, reply)
-  if (!request.auth || !isAdminRole(request.auth.user.role)) {
+  if (!request.auth?.user || !isAdminRole(request.auth.user.role)) {
     throw request.server.httpErrors.forbidden('Admin role required')
   }
 }
@@ -168,4 +172,11 @@ export const requireAdmin: Guard = async (request, reply) => {
 export function authOf(request: FastifyRequest): AuthContext {
   if (!request.auth) throw request.server.httpErrors.unauthorized('Authentication required')
   return request.auth
+}
+
+/** A human account principal; collection credentials never impersonate their issuer. */
+export function userOf(request: FastifyRequest): User {
+  const user = authOf(request).user
+  if (!user) throw request.server.httpErrors.forbidden('This endpoint requires a user account')
+  return user
 }

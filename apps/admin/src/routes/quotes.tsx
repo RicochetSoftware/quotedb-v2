@@ -32,7 +32,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { PlusIcon, TrashIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { allUsersQuery, api, errorMessage } from '../api'
+import { allCollectionsQuery, api, errorMessage } from '../api'
 import { PageHeader, Pagination } from '../components/layout'
 import type { QuotesSearch } from '../router'
 
@@ -40,7 +40,7 @@ export function QuotesPage() {
   const search = useSearch({ from: '/authed/quotes' })
   const pageSize = search.page_size ?? 25
   const navigate = useNavigate({ from: '/quotes' })
-  const users = useQuery(allUsersQuery)
+  const collections = useQuery(allCollectionsQuery)
   const [q, setQ] = useState(search.q ?? '')
   const [author, setAuthor] = useState(search.author ?? '')
   const [importing, setImporting] = useState(false)
@@ -109,7 +109,7 @@ export function QuotesPage() {
         title="Quotes"
         actions={
           <Button onClick={() => setImporting(true)}>
-            <PlusIcon /> Add for user
+            <PlusIcon /> Add to collection
           </Button>
         }
       />
@@ -130,12 +130,12 @@ export function QuotesPage() {
               onChange={(e) => setAuthor(e.target.value)}
             />
             <NativeSelect
-              aria-label="User"
-              value={search.user_id ?? ''}
-              onChange={(e) => setSearch({ user_id: e.target.value || undefined })}
+              aria-label="Collection"
+              value={search.collection_id ?? ''}
+              onChange={(e) => setSearch({ collection_id: e.target.value || undefined })}
             >
-              <option value="">All users</option>
-              {users.data?.users.map((u) => (
+              <option value="">All collections</option>
+              {collections.data?.collections.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
                 </option>
@@ -211,7 +211,7 @@ export function QuotesPage() {
                   </TableHead>
                   <TableHead>Quote</TableHead>
                   <TableHead>Author</TableHead>
-                  <TableHead>User</TableHead>
+                  <TableHead>Collection</TableHead>
                   <TableHead>Date</TableHead>
                 </TableRow>
               </TableHeader>
@@ -246,15 +246,7 @@ export function QuotesPage() {
                       {quote.deleted_at && <Badge variant="destructive">deleted</Badge>}
                     </TableCell>
                     <TableCell>{quote.author}</TableCell>
-                    <TableCell>
-                      <Link
-                        to="/users/$id"
-                        params={{ id: quote.user.id }}
-                        className="text-muted-foreground hover:underline"
-                      >
-                        {quote.user.name}
-                      </Link>
-                    </TableCell>
+                    <TableCell>{quote.collection.name}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {quote.date}
                     </TableCell>
@@ -282,7 +274,7 @@ export function QuotesPage() {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete ${selected.length} selected ${selected.length === 1 ? 'quote' : 'quotes'}?`}
-        description="These quotes will be hidden from their owners. You can restore them from the Deleted view."
+        description="These quotes will be hidden from their collections. You can restore them from the Deleted view."
         confirmLabel="Delete quotes"
         destructive
         onConfirm={() => void deleteSelected()}
@@ -290,7 +282,7 @@ export function QuotesPage() {
       <ImportQuoteDialog
         open={importing}
         onClose={() => setImporting(false)}
-        defaultUserId={search.user_id}
+        defaultCollectionId={search.collection_id}
       />
     </>
   )
@@ -299,17 +291,17 @@ export function QuotesPage() {
 function ImportQuoteDialog({
   open,
   onClose,
-  defaultUserId,
+  defaultCollectionId,
 }: {
   open: boolean
   onClose: () => void
-  defaultUserId: string | undefined
+  defaultCollectionId: string | undefined
 }) {
-  const users = useQuery(allUsersQuery)
+  const collections = useQuery(allCollectionsQuery)
   const queryClient = useQueryClient()
   const form = useForm<AdminQuoteCreateBody>({
     resolver: typeboxResolver(AdminQuoteCreateBody),
-    values: { user_id: defaultUserId ?? '', quote: '', author: '', date: '' },
+    values: { collection_id: defaultCollectionId ?? '', quote: '', author: '', date: '' },
   })
   const { errors, isSubmitting } = form.formState
 
@@ -329,22 +321,24 @@ function ImportQuoteDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add a quote for a user</DialogTitle>
+          <DialogTitle>Add a quote to a collection</DialogTitle>
           <DialogDescription>
-            The quote is owned by the chosen user, as if they had added it.
+            The quote will be visible to members of the chosen collection.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4" noValidate>
-          <Field id="user_id" label="User" error={errors.user_id ? 'Pick a user' : undefined}>
-            <NativeSelect id="user_id" {...form.register('user_id')}>
+          <Field
+            id="collection_id"
+            label="Collection"
+            error={errors.collection_id ? 'Pick a collection' : undefined}
+          >
+            <NativeSelect id="collection_id" {...form.register('collection_id')}>
               <option value="">Choose…</option>
-              {users.data?.users
-                .filter((u) => !u.deleted_at)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.email})
-                  </option>
-                ))}
+              {collections.data?.collections.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
             </NativeSelect>
           </Field>
           <Field id="quote" label="Quote" error={errors.quote?.message}>

@@ -8,6 +8,7 @@ The Elmu Quote Database, rebuilt as a TypeScript monorepo: a Fastify API on Post
 | `apps/web` | User app: quotes, random, settings, API tokens | http://localhost:5180 |
 | `apps/admin` | Admin app: dashboard, users, quotes | http://localhost:5181 |
 | `apps/site` | Static landing page (Astro) | http://localhost:4322 |
+| `apps/discord-bot` | Discord quotes bot ([setup](apps/discord-bot/README.md)) | `pnpm dev:discord` |
 | `packages/shared` | TypeBox schemas + typed API client | |
 | `packages/ui` | Shared UI components and theme | |
 | `e2e` | Playwright happy paths | |
@@ -44,7 +45,9 @@ curl -H "Authorization: Bearer qdb_live_…" -H 'content-type: application/json'
   -d '{"quote":"…","author":"…","date":"2024-01-31"}' https://api.<domain>/api/v1/quotes
 ```
 
-A token always acts as its owner, and it can never manage tokens or reach `/admin`. The v1 routes `/api/v1/quotes/{search,random}/user/:id?max_quotes=N` still work for your own user id (legacy integer or UUID) until the v2 release.
+Quotes belong to personal or shared collections. Use **Manage collections** to create a shared collection, manage members, and issue collection integration tokens for Discord. Personal tokens remain account-bound; integration tokens belong to one collection and survive issuer departure. Neither token kind can manage tokens or reach `/admin`. The v1 routes `/api/v1/quotes/{search,random}/user/:id?max_quotes=N` still work for your own user id (legacy integer or UUID) until the v2 release.
+
+See [collections and migration](docs/COLLECTIONS.md) for roles, API selection, and upgrading existing bot connections.
 
 ## Docs
 

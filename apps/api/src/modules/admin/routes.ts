@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
 import {
+  AdminCollectionList,
   AdminQuote,
   AdminQuoteCreateBody,
   AdminQuoteList,
@@ -33,8 +34,8 @@ import {
   sql,
 } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
-import { authOf, requireAdmin } from '../../auth/plugin'
-import { quotes, sessions, type User, users } from '../../db/schema'
+import { requireAdmin, userOf } from '../../auth/plugin'
+import { collectionMembers, collections, quotes, sessions, type User, users } from '../../db/schema'
 import { hashPassword } from '../../lib/passwords'
 import {
   likeContains,
@@ -44,6 +45,7 @@ import {
   toQuote,
 } from '../../lib/serialize'
 import { issueResetToken } from '../auth/reset'
+import { personalCollection } from '../collections/access'
 
 function statusCondition(column: PgColumn, status: StatusFilter = 'active'): SQL | undefined {
   if (status === 'active') return isNull(column)
@@ -77,7 +79,8 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.addHook('preHandler', requireAdmin)
 
   const quoteCount = sql<number>`(
-    select count(*)::int from ${quotes} where ${quotes.userId} = ${users.id} and ${quotes.deletedAt} is null
+    select count(*)::int from quotes q join collections c on c.id = q.collection_id
+    where c.personal_owner_id = "users"."id" and q.deleted_at is null
   )`
 
   async function loadUser(id: string): Promise<User> {
@@ -98,13 +101,18 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
   async function adminQuote(id: string): Promise<AdminQuote> {
     const [row] = await db
-      .select({ quote: quotes, user: { id: users.id, name: users.name, email: users.email } })
+      .select({
+        quote: quotes,
+        user: { id: users.id, name: users.name, email: users.email },
+        collection: { id: collections.id, name: collections.name, kind: collections.kind },
+      })
       .from(quotes)
-      .innerJoin(users, eq(users.id, quotes.userId))
+      .innerJoin(collections, eq(collections.id, quotes.collectionId))
+      .leftJoin(users, eq(users.id, quotes.createdByUserId))
       .where(eq(quotes.id, id))
       .limit(1)
     if (!row) throw app.httpErrors.notFound('Quote not found')
-    return toAdminQuote(row.quote, row.user)
+    return toAdminQuote(row.quote, row.user, row.collection)
   }
 
   // ── stats ──
@@ -129,16 +137,21 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
         })
         .from(quotes)
       const recent = await db
-        .select({ quote: quotes, user: { id: users.id, name: users.name, email: users.email } })
+        .select({
+          quote: quotes,
+          user: { id: users.id, name: users.name, email: users.email },
+          collection: { id: collections.id, name: collections.name, kind: collections.kind },
+        })
         .from(quotes)
-        .innerJoin(users, eq(users.id, quotes.userId))
+        .innerJoin(collections, eq(collections.id, quotes.collectionId))
+        .leftJoin(users, eq(users.id, quotes.createdByUserId))
         .where(isNull(quotes.deletedAt))
         .orderBy(desc(quotes.createdAt))
         .limit(5)
       return {
         users: userStats ?? { total: 0, admins: 0, deleted: 0 },
         quotes: quoteStats ?? { total: 0, deleted: 0, last_7_days: 0 },
-        recent_quotes: recent.map((r) => toAdminQuote(r.quote, r.user)),
+        recent_quotes: recent.map((r) => toAdminQuote(r.quote, r.user, r.collection)),
       }
     },
   )
@@ -190,7 +203,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     '/admin/users',
     { schema: { tags: ['admin'], body: AdminUserCreateBody, response: { 201: AdminUser } } },
     async (request, reply) => {
-      const actor = authOf(request).user
+      const actor = userOf(request)
       const { email, name, role = 'USER', password } = request.body
       if (role === 'SUPER_ADMIN' && actor.role !== 'SUPER_ADMIN') {
         throw app.httpErrors.forbidden('Only a super admin can grant SUPER_ADMIN')
@@ -235,7 +248,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
     },
     async (request) => {
-      const actor = authOf(request).user
+      const actor = userOf(request)
       const target = await loadUser(request.params.id)
       const problem = assertCanManage(actor, target, { role: request.body.role })
       if (problem) throw app.httpErrors.forbidden(problem)
@@ -266,11 +279,27 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     '/admin/users/:id',
     { schema: { tags: ['admin'], params: IdParams } },
     async (request, reply) => {
-      const actor = authOf(request).user
+      const actor = userOf(request)
       const target = await loadUser(request.params.id)
       const problem = assertCanManage(actor, target, { remove: true })
       if (problem) throw app.httpErrors.forbidden(problem)
       if (target.deletedAt) return reply.code(204).send()
+      const [ownsShared] = await db
+        .select({ id: collections.id })
+        .from(collections)
+        .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+        .where(
+          and(
+            eq(collectionMembers.userId, target.id),
+            eq(collectionMembers.role, 'owner'),
+            eq(collections.kind, 'shared'),
+          ),
+        )
+        .limit(1)
+      if (ownsShared)
+        throw app.httpErrors.conflict(
+          'Transfer shared collection ownership before deleting this user',
+        )
       await db.transaction(async (tx) => {
         await tx.update(users).set({ deletedAt: new Date() }).where(eq(users.id, target.id))
         await tx.delete(sessions).where(eq(sessions.userId, target.id))
@@ -287,7 +316,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     '/admin/users/:id/restore',
     { schema: { tags: ['admin'], params: IdParams, response: { 200: AdminUser } } },
     async (request) => {
-      const actor = authOf(request).user
+      const actor = userOf(request)
       const target = await loadUser(request.params.id)
       const problem = assertCanManage(actor, target, {})
       if (problem) throw app.httpErrors.forbidden(problem)
@@ -304,7 +333,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     '/admin/users/:id/password-reset',
     { schema: { tags: ['admin'], params: IdParams, response: { 200: OkResponse } } },
     async (request) => {
-      const actor = authOf(request).user
+      const actor = userOf(request)
       const target = await loadUser(request.params.id)
       const problem = assertCanManage(actor, target, {})
       if (problem) throw app.httpErrors.forbidden(problem)
@@ -326,10 +355,26 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       const rows = await db
         .select()
         .from(quotes)
-        .where(and(eq(quotes.userId, target.id), isNull(quotes.deletedAt)))
+        .where(
+          and(
+            eq(quotes.collectionId, (await personalCollection(db, target.id)).id),
+            isNull(quotes.deletedAt),
+          ),
+        )
         .orderBy(desc(quotes.createdAt))
       return { quotes: rows.map(toQuote) }
     },
+  )
+
+  app.get(
+    '/admin/collections',
+    { schema: { tags: ['admin'], response: { 200: AdminCollectionList } } },
+    async () => ({
+      collections: await db
+        .select({ id: collections.id, name: collections.name, kind: collections.kind })
+        .from(collections)
+        .orderBy(desc(collections.createdAt)),
+    }),
   )
 
   // ── quotes ──
@@ -344,9 +389,21 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
     },
     async (request) => {
-      const { user_id, author, q, from, to, status, page = 1, page_size = 25 } = request.query
+      const {
+        user_id,
+        collection_id,
+        author,
+        q,
+        from,
+        to,
+        status,
+        page = 1,
+        page_size = 25,
+      } = request.query
       const conditions = [statusCondition(quotes.deletedAt, status)]
-      if (user_id) conditions.push(eq(quotes.userId, user_id))
+      if (user_id)
+        conditions.push(eq(quotes.collectionId, (await personalCollection(db, user_id)).id))
+      if (collection_id) conditions.push(eq(quotes.collectionId, collection_id))
       if (author) conditions.push(sql`lower(${quotes.author}) = lower(${author})`)
       if (q)
         conditions.push(
@@ -358,9 +415,14 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       const where = and(...conditions)
       const [rows, [total]] = await Promise.all([
         db
-          .select({ quote: quotes, user: { id: users.id, name: users.name, email: users.email } })
+          .select({
+            quote: quotes,
+            user: { id: users.id, name: users.name, email: users.email },
+            collection: { id: collections.id, name: collections.name, kind: collections.kind },
+          })
           .from(quotes)
-          .innerJoin(users, eq(users.id, quotes.userId))
+          .innerJoin(collections, eq(collections.id, quotes.collectionId))
+          .leftJoin(users, eq(users.id, quotes.createdByUserId))
           .where(where)
           .orderBy(desc(quotes.createdAt))
           .limit(page_size)
@@ -368,7 +430,7 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
         db.select({ n: count() }).from(quotes).where(where),
       ])
       return {
-        quotes: rows.map((r) => toAdminQuote(r.quote, r.user)),
+        quotes: rows.map((r) => toAdminQuote(r.quote, r.user, r.collection)),
         total: total?.n ?? 0,
         page,
         page_size,
@@ -386,12 +448,18 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
     '/admin/quotes',
     { schema: { tags: ['admin'], body: AdminQuoteCreateBody, response: { 201: AdminQuote } } },
     async (request, reply) => {
-      const { user_id, quote, author, date } = request.body
-      const owner = await loadUser(user_id)
+      const { user_id, collection_id, quote, author, date } = request.body
+      if (!collection_id && !user_id) throw app.httpErrors.badRequest('Choose a collection')
+      if (collection_id && user_id) throw app.httpErrors.badRequest('Specify collection_id only')
+      const owner = user_id ? await loadUser(user_id) : userOf(request)
+      const targetId = collection_id ?? (await personalCollection(db, owner.id)).id
+      const [collection] = await db.select().from(collections).where(eq(collections.id, targetId))
+      if (!collection) throw app.httpErrors.notFound('Collection not found')
       const [row] = await db
         .insert(quotes)
         .values({
-          userId: owner.id,
+          collectionId: collection.id,
+          createdByUserId: owner.id,
           quote,
           author,
           createdAt: date ? parseBackdate(date) : new Date(),
@@ -401,13 +469,13 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       request.log.info(
         {
           audit: 'admin.quote.create',
-          actorId: authOf(request).user.id,
+          actorId: userOf(request).id,
           quoteId: row.id,
           userId: owner.id,
         },
         'quote created for user',
       )
-      return reply.code(201).send(toAdminQuote(row, owner))
+      return reply.code(201).send(toAdminQuote(row, owner, collection))
     },
   )
 
@@ -422,12 +490,19 @@ export const adminRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
     },
     async (request) => {
-      const { user_id, quote, author, date } = request.body
+      const { user_id, collection_id, quote, author, date } = request.body
+      if (collection_id && user_id) throw app.httpErrors.badRequest('Specify collection_id only')
       if (user_id) await loadUser(user_id)
+      const targetId =
+        collection_id ?? (user_id ? (await personalCollection(db, user_id)).id : undefined)
+      if (targetId) {
+        const [target] = await db.select().from(collections).where(eq(collections.id, targetId))
+        if (!target) throw app.httpErrors.notFound('Collection not found')
+      }
       const [row] = await db
         .update(quotes)
         .set({
-          ...(user_id !== undefined && { userId: user_id }),
+          ...(targetId !== undefined && { collectionId: targetId }),
           ...(quote !== undefined && { quote }),
           ...(author !== undefined && { author }),
           ...(date !== undefined && { createdAt: parseBackdate(date) }),

@@ -1,7 +1,7 @@
 import type { Scope } from '@quotedb/shared'
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { type ApiTokenRow, apiTokens, type User, users } from '../db/schema'
+import { type ApiTokenRow, apiTokens, collections, type User, users } from '../db/schema'
 import { base62ToUuid, randomBase62, safeEqualHex, sha256, uuidToBase62 } from '../lib/crypto'
 
 export type TokenEnv = 'live' | 'test'
@@ -33,7 +33,7 @@ export function parseToken(raw: string): { env: TokenEnv; id: string; secret: st
 }
 
 export type TokenLookup =
-  | { ok: true; token: ApiTokenRow; user: User }
+  | { ok: true; token: ApiTokenRow; user: User | null }
   | { ok: false; reason: 'unknown' | 'revoked' | 'expired' | 'mismatch' | 'user-deleted' | 'env' }
 
 /** O(1) lookup by id, then constant-time hash compare. Never scans rows. */
@@ -48,7 +48,8 @@ export async function verifyToken(
   const [row] = await db
     .select({ token: apiTokens, user: users })
     .from(apiTokens)
-    .innerJoin(users, eq(users.id, apiTokens.userId))
+    .innerJoin(collections, eq(collections.id, apiTokens.collectionId))
+    .leftJoin(users, eq(users.id, apiTokens.userId))
     .where(eq(apiTokens.id, parsed.id))
     .limit(1)
   if (!row) return { ok: false, reason: 'unknown' }
@@ -57,7 +58,8 @@ export async function verifyToken(
   if (row.token.revokedAt) return { ok: false, reason: 'revoked' }
   if (row.token.expiresAt && row.token.expiresAt <= new Date())
     return { ok: false, reason: 'expired' }
-  if (row.user.deletedAt) return { ok: false, reason: 'user-deleted' }
+  if (row.token.kind === 'personal' && (!row.user || row.user.deletedAt))
+    return { ok: false, reason: 'user-deleted' }
   return { ok: true, token: row.token, user: row.user }
 }
 

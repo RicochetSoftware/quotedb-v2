@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { meQuery, queryClient } from './api'
 import { Layout, NotFound } from './components/layout'
+import { CollectionsPage } from './routes/collections'
 import { ForgotPasswordPage } from './routes/forgot-password'
 import { HomePage } from './routes/home'
 import { IzaroPage } from './routes/izaro'
@@ -77,6 +78,12 @@ const authedRoute = createRoute({
   },
 })
 
+const collectionsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/collections',
+  component: CollectionsPage,
+})
+
 const quotesRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/quotes',
@@ -118,6 +125,7 @@ const routeTree = rootRoute.addChildren([
   resetRoute,
   izaroRoute,
   authedRoute.addChildren([
+    collectionsRoute,
     quotesRoute,
     randomRoute,
     settingsRoute.addChildren([settingsIndexRoute, accountRoute, tokensRoute]),

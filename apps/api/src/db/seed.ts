@@ -1,6 +1,7 @@
 // Dev-only seed: an admin and a regular user with a few quotes. Safe to re-run.
 import { eq } from 'drizzle-orm'
 import { hashPassword } from '../lib/passwords'
+import { personalCollection } from '../modules/collections/access'
 import { createDb } from './client'
 import { quotes, users } from './schema'
 
@@ -30,18 +31,37 @@ async function upsertUser(
 const admin = await upsertUser('admin@quotedb.local', 'Elmu Kelmu', 'SUPER_ADMIN', 1)
 const izaro = await upsertUser('izaro@quotedb.local', 'Izaro', 'USER', 2)
 
+const adminCollection = await personalCollection(db, admin.id)
+const izaroCollection = await personalCollection(db, izaro.id)
+
 const [anyQuote] = await db.select().from(quotes).limit(1)
 if (!anyQuote) {
   await db.insert(quotes).values([
     {
-      userId: admin.id,
+      createdByUserId: admin.id,
+      collectionId: adminCollection.id,
       quote: 'I will finish the quote db one day',
       author: 'Elmu',
       createdAt: new Date('2023-06-01'),
     },
-    { userId: admin.id, quote: 'It works on my machine', author: 'Every developer' },
-    { userId: izaro.id, quote: 'Kaixo mundua', author: 'Izaro' },
-    { userId: izaro.id, quote: 'Coffee first, then quotes', author: 'Izaro' },
+    {
+      createdByUserId: admin.id,
+      collectionId: adminCollection.id,
+      quote: 'It works on my machine',
+      author: 'Every developer',
+    },
+    {
+      createdByUserId: izaro.id,
+      collectionId: izaroCollection.id,
+      quote: 'Kaixo mundua',
+      author: 'Izaro',
+    },
+    {
+      createdByUserId: izaro.id,
+      collectionId: izaroCollection.id,
+      quote: 'Coffee first, then quotes',
+      author: 'Izaro',
+    },
   ])
 }
 

@@ -70,7 +70,8 @@ export function TokensPage() {
         <div className="grid gap-1.5">
           <CardTitle>API tokens</CardTitle>
           <CardDescription>
-            Tokens let scripts use the API as you, limited to the scopes you pick. Send them as{' '}
+            Personal tokens access your personal collection and remain tied to your account. Create
+            bot tokens under Manage collections. Send tokens as{' '}
             <code className="text-xs">Authorization: Bearer …</code>
           </CardDescription>
         </div>
@@ -266,7 +267,7 @@ function CreateTokenDialog({
   )
 }
 
-function CreatedTokenDialog({
+export function CreatedTokenDialog({
   token,
   onClose,
 }: {

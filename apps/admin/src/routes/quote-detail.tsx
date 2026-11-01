@@ -19,16 +19,16 @@ import {
   typeboxResolver,
 } from '@quotedb/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from '@tanstack/react-router'
+import { useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { allUsersQuery, api, errorMessage } from '../api'
+import { allCollectionsQuery, api, errorMessage } from '../api'
 import { PageHeader } from '../components/layout'
 
 export function QuoteDetailPage() {
   const { id } = useParams({ from: '/authed/quotes/$id' })
   const queryClient = useQueryClient()
-  const users = useQuery(allUsersQuery)
+  const collections = useQuery(allCollectionsQuery)
   const quote = useQuery({
     queryKey: ['admin', 'quote', id],
     queryFn: () => api.admin.quotes.get(id),
@@ -40,7 +40,7 @@ export function QuoteDetailPage() {
       quote: quote.data.quote,
       author: quote.data.author,
       date: quote.data.date,
-      user_id: quote.data.user.id,
+      collection_id: quote.data.collection.id,
     },
   })
   const { errors, isSubmitting } = form.formState
@@ -82,12 +82,7 @@ export function QuoteDetailPage() {
       <PageHeader title="Edit quote" />
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>
-            by{' '}
-            <Link to="/users/$id" params={{ id: q.user.id }} className="hover:underline">
-              {q.user.name}
-            </Link>
-          </CardTitle>
+          <CardTitle>{q.collection.name}</CardTitle>
           <CardDescription>
             Added {formatDate(q.created_at)} · updated {formatDate(q.updated_at)}
             {q.external_id !== null && ` · v1 id ${q.external_id}`}
@@ -96,7 +91,7 @@ export function QuoteDetailPage() {
         <CardContent className="grid gap-6">
           {q.deleted_at && (
             <Alert variant="warning" className="flex items-center justify-between gap-4">
-              Deleted {formatDate(q.deleted_at)}. It's hidden from its owner.
+              Deleted {formatDate(q.deleted_at)}. It's hidden from its collection.
               <Button size="sm" onClick={() => restore.mutate()} disabled={restore.isPending}>
                 Restore
               </Button>
@@ -113,9 +108,9 @@ export function QuoteDetailPage() {
               <Field id="date" label="Date" error={errors.date?.message}>
                 <Input id="date" type="date" {...form.register('date')} />
               </Field>
-              <Field id="user_id" label="Owner">
-                <NativeSelect id="user_id" {...form.register('user_id')}>
-                  {users.data?.users.map((u) => (
+              <Field id="collection_id" label="Collection">
+                <NativeSelect id="collection_id" {...form.register('collection_id')}>
+                  {collections.data?.collections.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
@@ -140,7 +135,7 @@ export function QuoteDetailPage() {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete this quote?"
-        description="It's soft-deleted: hidden from its owner, restorable here."
+        description="It's soft-deleted: hidden from its collection, restorable here."
         confirmLabel="Delete"
         destructive
         onConfirm={() => remove.mutate()}

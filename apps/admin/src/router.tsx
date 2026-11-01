@@ -105,6 +105,7 @@ const userDetailRoute = createRoute({
 
 export interface QuotesSearch {
   user_id?: string
+  collection_id?: string
   author?: string
   q?: string
   from?: string
@@ -119,6 +120,7 @@ const quotesRoute = createRoute({
   validateSearch: (s): QuotesSearch =>
     compact({
       user_id: str(s.user_id),
+      collection_id: str(s.collection_id),
       author: str(s.author),
       q: str(s.q),
       from: str(s.from),

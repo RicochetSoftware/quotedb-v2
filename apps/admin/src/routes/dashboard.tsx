@@ -65,7 +65,7 @@ export function DashboardPage() {
                     “{q.quote}”
                   </Link>
                   <div className="text-sm text-muted-foreground">
-                    — {q.author} · {q.date} · by {q.user.name}
+                    — {q.author} · {q.date} · {q.collection.name}
                   </div>
                 </li>
               ))}

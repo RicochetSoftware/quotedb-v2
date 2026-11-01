@@ -1,4 +1,5 @@
 import Type from 'typebox'
+import { CollectionSummary } from './collections'
 import {
   DateOrTimestamp,
   Email,
@@ -69,10 +70,12 @@ export const AdminQuote = Type.Object({
   ...Quote.properties,
   external_id: nullable(Type.Integer()),
   deleted_at: nullable(Timestamp),
-  user: AdminQuoteUser,
+  user: nullable(AdminQuoteUser),
+  collection: CollectionSummary,
 })
 
 export const AdminQuoteListQuery = Type.Object({
+  collection_id: Type.Optional(Uuid),
   user_id: Type.Optional(Uuid),
   author: Type.Optional(Type.String({ minLength: 1, maxLength: AUTHOR_MAX_LENGTH })),
   q: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
@@ -91,7 +94,8 @@ export const AdminQuoteList = Type.Object({
 
 export const AdminQuoteCreateBody = Type.Object(
   {
-    user_id: Uuid,
+    collection_id: Type.Optional(Uuid),
+    user_id: Type.Optional(Uuid),
     quote: Type.String({ minLength: 1, maxLength: QUOTE_MAX_LENGTH }),
     author: Type.String({ minLength: 1, maxLength: AUTHOR_MAX_LENGTH }),
     date: Type.Optional(DateOrTimestamp),
@@ -101,6 +105,7 @@ export const AdminQuoteCreateBody = Type.Object(
 
 export const AdminQuoteUpdateBody = Type.Object(
   {
+    collection_id: Type.Optional(Uuid),
     user_id: Type.Optional(Uuid),
     quote: Type.Optional(Type.String({ minLength: 1, maxLength: QUOTE_MAX_LENGTH })),
     author: Type.Optional(Type.String({ minLength: 1, maxLength: AUTHOR_MAX_LENGTH })),
@@ -130,3 +135,6 @@ export type AdminQuoteList = Type.Static<typeof AdminQuoteList>
 export type AdminQuoteCreateBody = Type.Static<typeof AdminQuoteCreateBody>
 export type AdminQuoteUpdateBody = Type.Static<typeof AdminQuoteUpdateBody>
 export type AdminStats = Type.Static<typeof AdminStats>
+
+export const AdminCollectionList = Type.Object({ collections: Type.Array(CollectionSummary) })
+export type AdminCollectionList = Type.Static<typeof AdminCollectionList>

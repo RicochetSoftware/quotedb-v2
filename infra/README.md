@@ -90,7 +90,7 @@ Secrets:
 Variables:
 `DOMAIN=quotes.elmu.dev`, `CLOUDFLARE_ACCOUNT_ID` (R2), `CLOUDFLARE_ZONE_ID`,
 `SSH_PUBLIC_KEYS` (JSON array). Optional: `DIGITALOCEAN_REGION=fra1`,
-`DROPLET_SIZE=s-1vcpu-1gb`, `DROPLET_BACKUPS=false`, `IZARO_USER_ID`.
+`DROPLET_SIZE=s-1vcpu-1gb`, `DROPLET_BACKUPS=false`, `IZARO_USER_ID`, `IZARO_COLLECTION_ID` (explicit public collection, takes precedence).
 Keep CI variables consistent with local tfvars: CI does not read gitignored files.
 
 Manual deployment, after building and pushing the two images from a workstation:
@@ -113,9 +113,9 @@ Build the static image with `--build-arg DOMAIN=quotes.elmu.dev`; its API URLs a
 the browser bundles. Both images must target `linux/amd64`.
 
 A release waits for cloud-init, uploads files into a private staging directory, takes a remote
-lock, reuses one SSH connection to respect UFW rate limits, pulls images sequentially, starts PostgreSQL, takes a dump, runs migrations, and then
-replaces API/Caddy containers. A migration failure leaves the old application containers
-running, though schema changes may already have occurred. It checks HTTPS for all four hosts.
+lock, reuses one SSH connection to respect UFW rate limits, pulls images sequentially, starts PostgreSQL, pauses API/bot writers, takes a dump, runs migrations, and then
+replaces API/Caddy containers. A migration failure leaves writers stopped for recovery;
+old binaries must not resume against an incompatible schema. It checks HTTPS for all four hosts.
 Registry credentials are isolated to staging and removed when the release finishes.
 
 For an application rollback, run the workflow with **both** `api_image` and `static_image`
@@ -201,3 +201,55 @@ docker compose up -d --build
 
 Use `DOMAIN=localhost` for `https://app.localhost` and the other local hosts (Caddy's local CA).
 Production uses the prebuilt-image stack in `droplet/`.
+
+## Discord bot
+
+The bot is optional. Existing deployments work without Discord credentials. Its
+commands and local setup are documented in [apps/discord-bot/README.md](../apps/discord-bot/README.md).
+
+For GitHub deployment, set repository variable `DISCORD_BOT_ENABLED=true` and secret
+`DISCORD_BOT_ENV` to the complete contents of a filled-in
+[droplet/bot.env.example](droplet/bot.env.example). Use a generated encryption key and
+strong URL-encoded database password. Do not put the collection integration key in this
+file: administrators enter that key through `/quote setup` after deployment.
+
+The workflow builds a third GHCR image and deploys `compose.bot.yaml` alongside the
+base Compose file. The one-shot `bot-migrate` service gets the API database-owner
+connection to provision the restricted `quotedb_bot` role and `discord_bot` schema.
+The long-running service receives only `bot.env`, never `api.env`. Configuration is
+included in the existing full-database backup. Keep the encryption key separately.
+
+After the first deployment (and whenever command definitions change), register guild
+commands explicitly on the server:
+
+```bash
+cd /opt/quotedb
+docker compose run --rm --no-deps discord-bot node dist/commands/register.js
+docker compose ps discord-bot
+docker compose logs --tail=50 discord-bot
+```
+
+For a manual release, pass `BOT_IMAGE` and `BOT_ENV_FILE` to `deploy.sh` in addition
+to its existing arguments. Both are required together. For a bot image rollback,
+use the previous bot image plus the current API/static images; when the bot is enabled,
+the workflow requires all three rollback image references. Schema changes must remain
+backward compatible. Disabling `DISCORD_BOT_ENABLED` removes the bot service on the
+next release; it retains database settings and does not revoke API keys.
+
+The bot uses a 192 MB memory limit initially; verify actual host headroom and container
+health before enabling it on the 1 GB Droplet. No additional host port is published.
+`ops-check.sh` checks bot health when it is configured. API/database outages can make
+the bot temporarily unhealthy without terminating the existing web services.
+
+For self-hosting, copy `droplet/bot.env.example` to `selfhost/bot.env`, fill in the
+values, then use the optional override:
+
+```bash
+cd infra/selfhost
+docker compose -f compose.yaml -f compose.bot.yaml --profile discord up -d --build
+docker compose -f compose.yaml -f compose.bot.yaml --profile discord run --rm --no-deps discord-bot node dist/commands/register.js
+```
+
+Self-host migration runs before bot startup. Backup/restore and encryption-key rotation
+procedures are in the bot README. Retain a matching encryption key for each retained
+database backup; database dumps alone cannot recover encrypted API credentials.

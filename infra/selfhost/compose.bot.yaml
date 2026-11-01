@@ -1,0 +1,37 @@
+# Optional: docker compose -f compose.yaml -f compose.bot.yaml --profile discord ...
+services:
+  discord-bot:
+    profiles: [discord]
+    build:
+      context: ../..
+      dockerfile: infra/docker/discord-bot.Dockerfile
+    restart: unless-stopped
+    env_file: bot.env
+    environment:
+      NODE_ENV: production
+      QUOTEDB_API_URL: http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+      bot-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+  bot-migrate:
+    profiles: [discord]
+    build:
+      context: ../..
+      dockerfile: infra/docker/discord-bot.Dockerfile
+    env_file: bot.env
+    environment:
+      BOT_MIGRATION_DATABASE_URL: postgresql://quotedb:${POSTGRES_PASSWORD}@postgres:5432/quotedb
+    command: [node, dist/migrate.js]
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy

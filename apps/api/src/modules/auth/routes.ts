@@ -9,7 +9,7 @@ import {
   SessionList,
 } from '@quotedb/shared'
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
-import { authOf, requireScope, requireSession } from '../../auth/plugin'
+import { authOf, requireScope, requireSession, userOf } from '../../auth/plugin'
 import { createSession, SESSION_COOKIE, sessionCookieOptions } from '../../auth/session'
 import { passwordResetTokens, sessions, users } from '../../db/schema'
 import { sha256 } from '../../lib/crypto'
@@ -99,7 +99,7 @@ export const authRoutes: FastifyPluginAsyncTypebox = async (app) => {
       if (auth.kind !== 'session') throw app.httpErrors.forbidden()
       await db
         .delete(sessions)
-        .where(and(eq(sessions.userId, auth.user.id), ne(sessions.id, auth.sessionId)))
+        .where(and(eq(sessions.userId, userOf(request).id), ne(sessions.id, auth.sessionId)))
       return { ok: true as const }
     },
   )
@@ -112,7 +112,7 @@ export const authRoutes: FastifyPluginAsyncTypebox = async (app) => {
       const rows = await db
         .select()
         .from(sessions)
-        .where(and(eq(sessions.userId, auth.user.id), gt(sessions.expiresAt, new Date())))
+        .where(and(eq(sessions.userId, userOf(request).id), gt(sessions.expiresAt, new Date())))
         .orderBy(desc(sessions.createdAt))
       return {
         sessions: rows.map((s) => ({
@@ -209,7 +209,7 @@ export const authRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
     async (request) => {
       const auth = authOf(request)
-      const { ok } = await verifyPassword(auth.user, request.body.current_password)
+      const { ok } = await verifyPassword(userOf(request), request.body.current_password)
       if (!ok) throw app.httpErrors.badRequest('Current password is incorrect')
       await assertNotBreached(request.body.new_password)
       await db
@@ -218,13 +218,13 @@ export const authRoutes: FastifyPluginAsyncTypebox = async (app) => {
           passwordHash: await hashPassword(request.body.new_password),
           passwordAlgo: 'argon2id',
         })
-        .where(eq(users.id, auth.user.id))
+        .where(eq(users.id, userOf(request).id))
       if (request.body.revoke_other_sessions !== false && auth.kind === 'session') {
         await db
           .delete(sessions)
-          .where(and(eq(sessions.userId, auth.user.id), ne(sessions.id, auth.sessionId)))
+          .where(and(eq(sessions.userId, userOf(request).id), ne(sessions.id, auth.sessionId)))
       }
-      request.log.info({ audit: 'password.change', userId: auth.user.id }, 'password changed')
+      request.log.info({ audit: 'password.change', userId: userOf(request).id }, 'password changed')
       return { ok: true as const }
     },
   )
@@ -232,6 +232,6 @@ export const authRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get(
     '/me',
     { schema: { tags: ['auth'], response: { 200: Me } }, preHandler: requireScope('profile:read') },
-    async (request) => toMe(authOf(request).user),
+    async (request) => toMe(userOf(request)),
   )
 }

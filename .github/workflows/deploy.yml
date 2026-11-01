@@ -1,5 +1,5 @@
 # One Droplet: PostgreSQL, API, and a Caddy image containing web/admin/site.
-# Both images are built on the runner; weekly releases refresh their base images.
+# Images are built on the runner; weekly releases refresh their base images.
 # Secrets: DIGITALOCEAN_TOKEN, CLOUDFLARE_API_TOKEN, RESEND_API_KEY,
 #          TOFU_STATE_PASSPHRASE, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, DEPLOY_SSH_KEY.
 # Variables: DOMAIN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ZONE_ID, SSH_PUBLIC_KEYS (JSON),
@@ -17,6 +17,10 @@ on:
     inputs:
       api_image:
         description: "Rollback API image; must also supply static_image"
+        required: false
+
+      bot_image:
+        description: "Rollback bot image (required with rollback images when bot enabled)"
         required: false
 
       static_image:
@@ -45,6 +49,7 @@ env:
   TF_VAR_droplet_size: ${{ vars.DROPLET_SIZE || 's-1vcpu-1gb' }}
   TF_VAR_droplet_backups: ${{ vars.DROPLET_BACKUPS || 'false' }}
   TF_VAR_izaro_user_id: ${{ vars.IZARO_USER_ID }}
+  TF_VAR_izaro_collection_id: ${{ vars.IZARO_COLLECTION_ID }}
   # R2 credentials for the S3 state backend.
   AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -101,15 +106,22 @@ jobs:
         env:
           ROLLBACK_API: ${{ inputs.api_image }}
           ROLLBACK_STATIC: ${{ inputs.static_image }}
+          ROLLBACK_BOT: ${{ inputs.bot_image }}
+          BOT_ENABLED: ${{ vars.DISCORD_BOT_ENABLED }}
         run: |
-          if [[ -n "$ROLLBACK_API" || -n "$ROLLBACK_STATIC" ]]; then
+          if [[ -n "$ROLLBACK_API" || -n "$ROLLBACK_STATIC" || -n "$ROLLBACK_BOT" ]]; then
             [[ -n "$ROLLBACK_API" && -n "$ROLLBACK_STATIC" ]] || { echo 'Supply both rollback images'; exit 1; }
+            if [[ "$BOT_ENABLED" == "true" ]]; then
+              [[ -n "$ROLLBACK_BOT" ]] || { echo 'Supply bot_image for rollback when bot is enabled'; exit 1; }
+              echo "bot=$ROLLBACK_BOT" >> "$GITHUB_OUTPUT"
+            fi
             echo "api=$ROLLBACK_API" >> "$GITHUB_OUTPUT"
             echo "static=$ROLLBACK_STATIC" >> "$GITHUB_OUTPUT"
           else
             {
               echo "api=ghcr.io/${GITHUB_REPOSITORY,,}/api:${GITHUB_SHA}"
               echo "static=ghcr.io/${GITHUB_REPOSITORY,,}/static:${GITHUB_SHA}"
+              echo "bot=ghcr.io/${GITHUB_REPOSITORY,,}/discord-bot:${GITHUB_SHA}"
               echo "build=true"
             } >> "$GITHUB_OUTPUT"
           fi
@@ -146,6 +158,18 @@ jobs:
           tags: ${{ steps.images.outputs.static }}
           cache-from: type=gha,scope=static
           cache-to: type=gha,mode=max,scope=static
+      - name: Build Discord bot
+        uses: docker/build-push-action@v7
+        if: steps.images.outputs.build == 'true' && vars.DISCORD_BOT_ENABLED == 'true'
+        with:
+          context: .
+          file: infra/docker/discord-bot.Dockerfile
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.images.outputs.bot }}
+          cache-from: type=gha,scope=discord-bot
+          cache-to: type=gha,mode=max,scope=discord-bot
       - uses: ./.github/actions/tofu-init
         with:
           cloudflare-account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -180,12 +204,21 @@ jobs:
           API_IMAGE: ${{ steps.images.outputs.api }}
           STATIC_IMAGE: ${{ steps.images.outputs.static }}
           DOMAIN: ${{ vars.DOMAIN }}
+          BOT_ENABLED: ${{ vars.DISCORD_BOT_ENABLED }}
+          BOT_IMAGE_CANDIDATE: ${{ steps.images.outputs.bot }}
+          DISCORD_BOT_ENV: ${{ secrets.DISCORD_BOT_ENV }}
         run: |
+          if [[ "$BOT_ENABLED" == "true" ]]; then
+            [[ -n "$DISCORD_BOT_ENV" ]] || { echo 'Missing DISCORD_BOT_ENV secret'; exit 1; }
+            umask 077
+            printf '%s\n' "$DISCORD_BOT_ENV" > "$RUNNER_TEMP/bot.env"
+            export BOT_IMAGE="$BOT_IMAGE_CANDIDATE" BOT_ENV_FILE="$RUNNER_TEMP/bot.env"
+          fi
           infra/droplet/deploy.sh "$DEPLOY_TARGET" "$API_IMAGE" "$STATIC_IMAGE" "$DOMAIN" \
             "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/known_hosts"
       - name: Remove temporary secrets
         if: always()
         run: |
-          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env"; do
+          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env"; do
             if [[ -f "$file" ]]; then unlink "$file"; fi
           done

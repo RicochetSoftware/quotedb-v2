@@ -1,4 +1,5 @@
 import type {
+  AdminCollectionList,
   AdminQuote,
   AdminQuoteCreateBody,
   AdminQuoteList,
@@ -20,6 +21,14 @@ import type {
   SessionList,
 } from './schemas/auth'
 import type {
+  Collection,
+  CollectionCreateBody,
+  CollectionList,
+  CollectionMember,
+  CollectionMemberBody,
+  CollectionUpdateBody,
+} from './schemas/collections'
+import type {
   PublicQuote,
   Quote,
   QuoteCreateBody,
@@ -28,7 +37,13 @@ import type {
   QuoteUpdateBody,
   RandomQuoteQuery,
 } from './schemas/quotes'
-import type { TokenCreateBody, TokenCreated, TokenList } from './schemas/tokens'
+import type {
+  CollectionTokenCreateBody,
+  TokenCreateBody,
+  TokenCreated,
+  TokenInfo,
+  TokenList,
+} from './schemas/tokens'
 
 export class ApiError extends Error {
   constructor(
@@ -47,9 +62,16 @@ export interface ApiClientOptions {
   /** e.g. `https://api.quotes.example` — empty string means same origin (dev proxy). */
   baseUrl: string
   fetch?: typeof fetch
+  bearerToken?: string
+  timeoutMs?: number
 }
 
-export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClientOptions) {
+export function createApiClient({
+  baseUrl,
+  fetch: fetchImpl = fetch,
+  bearerToken,
+  timeoutMs,
+}: ApiClientOptions) {
   async function request<T>(
     method: string,
     path: string,
@@ -63,8 +85,12 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
     }
     const res = await fetchImpl(url, {
       method,
-      credentials: 'include',
-      headers: opts.body === undefined ? {} : { 'content-type': 'application/json' },
+      credentials: bearerToken ? 'omit' : 'include',
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+      headers: {
+        ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(bearerToken ? { authorization: `Bearer ${bearerToken}` } : {}),
+      },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     })
     if (res.status === 204) return undefined as T
@@ -79,6 +105,25 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
   }
 
   return {
+    collections: {
+      list: () => request<CollectionList>('GET', '/collections'),
+      create: (body: CollectionCreateBody) => request<Collection>('POST', '/collections', { body }),
+      update: (id: string, body: CollectionUpdateBody) =>
+        request<Collection>('PATCH', `/collections/${id}`, { body }),
+      members: (id: string) =>
+        request<{ members: CollectionMember[] }>('GET', `/collections/${id}/members`),
+      setMember: (id: string, body: CollectionMemberBody) =>
+        request<void>('PUT', `/collections/${id}/members`, { body }),
+      removeMember: (id: string, userId: string) =>
+        request<void>('DELETE', `/collections/${id}/members/${userId}`),
+      transfer: (id: string, userId: string) =>
+        request<void>('POST', `/collections/${id}/transfer`, { body: { user_id: userId } }),
+      tokens: (id: string) => request<TokenList>('GET', `/collections/${id}/tokens`),
+      createToken: (id: string, body: CollectionTokenCreateBody) =>
+        request<TokenCreated>('POST', `/collections/${id}/tokens`, { body }),
+      revokeToken: (id: string, tokenId: string) =>
+        request<void>('DELETE', `/collections/${id}/tokens/${tokenId}`),
+    },
     auth: {
       login: (body: LoginBody) => request<Me>('POST', '/auth/login', { body }),
       logout: () => request<void>('POST', '/auth/logout'),
@@ -102,6 +147,7 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
         request<Quote>('PATCH', `/quotes/${id}`, { body }),
       remove: (id: string) => request<void>('DELETE', `/quotes/${id}`),
     },
+    tokenInfo: () => request<TokenInfo>('GET', '/token-info'),
     tokens: {
       list: () => request<TokenList>('GET', '/tokens'),
       create: (body: TokenCreateBody) => request<TokenCreated>('POST', '/tokens', { body }),
@@ -111,6 +157,7 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
       izaro: () => request<PublicQuote>('GET', '/public/izaro'),
     },
     admin: {
+      collections: () => request<AdminCollectionList>('GET', '/admin/collections'),
       stats: () => request<AdminStats>('GET', '/admin/stats'),
       users: {
         list: (query: AdminUserListQuery = {}) =>

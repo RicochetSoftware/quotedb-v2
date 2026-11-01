@@ -33,6 +33,7 @@ export const EnvSchema = Type.Object({
   HIBP_ENABLED: Type.Optional(Bool),
   /** User whose quotes `/izaro` shows: a UUID or a legacy integer id. Unset = page disabled. */
   IZARO_USER_ID: Type.Optional(Type.String()),
+  IZARO_COLLECTION_ID: Type.Optional(Type.String({ format: 'uuid' })),
 })
 
 export interface Env {
@@ -52,6 +53,7 @@ export interface Env {
   RESEND_API_KEY: string | undefined
   HIBP_ENABLED: boolean
   IZARO_USER_ID: string | undefined
+  IZARO_COLLECTION_ID: string | undefined
 }
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
@@ -74,5 +76,6 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     COOKIE_DOMAIN: env.COOKIE_DOMAIN,
     RESEND_API_KEY: env.RESEND_API_KEY,
     IZARO_USER_ID: env.IZARO_USER_ID,
+    IZARO_COLLECTION_ID: env.IZARO_COLLECTION_ID,
   }
 }
