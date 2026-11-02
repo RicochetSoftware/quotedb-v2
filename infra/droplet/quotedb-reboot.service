@@ -1,0 +1,12 @@
+[Unit]
+Description=Register QuoteDB maintenance and reboot after system updates
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/run/reboot-required
+ConditionPathExists=/opt/quotedb/status-maintenance.json
+
+[Service]
+Type=oneshot
+ExecStart=/opt/quotedb/maintenance-reboot.sh
+TimeoutStartSec=12min
+UMask=0077

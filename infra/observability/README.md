@@ -136,6 +136,28 @@ by the operator. Notes are public, plain text, at most 500 characters.
 `{"kind":"refresh"}` rebuilds the public snapshot. It
 runs no probes, creates no observations, and cannot manufacture freshness.
 
+### Automatic deployment and reboot maintenance
+
+When `STATUS_ENABLED=true`, CI supplies a private `status-maintenance.json` containing
+only the operator URL and secret. The release preserves this file for manual releases
+and registers a ten-minute window for all five components after image pulls and
+before replacing any running service. Registration failure aborts the release before
+services are interrupted. Manual `deploy.sh` invocations can supply the same JSON via
+`STATUS_MAINTENANCE_FILE`; once installed, subsequent releases reuse it.
+
+The release also installs `quotedb-reboot.timer`, which checks at 04:00 UTC for
+`/var/run/reboot-required`. It takes the deployment lock, registers the same bounded
+window, then reboots. It replaces unattended-upgrades' direct reboot via an APT
+override; package updates remain automatic. No reboot needed means no maintenance
+window. Registration failure skips the reboot and fails the service; ops-check reports
+that failure. The timer does not catch up missed runs after boot. Unscheduled manual
+reboots still need an operator window (or use the maintenance helper before rebooting).
+
+Windows expire automatically after ten minutes even if deployment or recovery fails;
+failures after expiry count as downtime. Healthy time within a window is also excluded
+from uptime. A partially failed registration may leave a window for the components
+already registered, but does not interrupt services. Existing history is unchanged.
+
 ## State, history and outages
 
 Checks have fixed HTTPS destinations, no redirects, a shared five-second deadline

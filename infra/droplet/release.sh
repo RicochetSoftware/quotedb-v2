@@ -30,6 +30,18 @@ if [[ -f observability.env ]]; then
 fi
 if [[ -f "$stage/bot.env" ]]; then install -m 600 "$stage/bot.env" bot.env; fi
 install -m 750 "$stage/backup.sh" backup.sh
+install -m 750 "$stage/status-maintenance.py" status-maintenance.py
+install -m 750 "$stage/maintenance-reboot.sh" maintenance-reboot.sh
+if [[ -f "$stage/status-maintenance.json" ]]; then
+  install -m 600 "$stage/status-maintenance.json" status-maintenance.json
+fi
+if [[ -f status-maintenance.json ]]; then
+  sudo install -m 644 "$stage/quotedb-reboot.service" "$stage/quotedb-reboot.timer" /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now quotedb-reboot.timer
+  # Replace unattended-upgrades' direct reboot only after the replacement is enabled.
+  printf 'Unattended-Upgrade::Automatic-Reboot "false";\n' | sudo tee /etc/apt/apt.conf.d/99quotedb-maintenance-reboot >/dev/null
+fi
 # Registry credentials are private to this release and removed with staging.
 export DOCKER_CONFIG="$stage/docker-auth"
 if [[ -f "$stage/registry-token" ]]; then
@@ -37,6 +49,11 @@ if [[ -f "$stage/registry-token" ]]; then
 fi
 # Sequential pulls reduce memory spikes on the 1 GB host.
 COMPOSE_PARALLEL_LIMIT=1 docker compose pull --quiet
+# Register after pulls, before the first operation that can replace a running service.
+# Fail closed: a status API failure must not cause an unannounced interruption.
+if [[ -f status-maintenance.json ]]; then
+  python3 ./status-maintenance.py ./status-maintenance.json deploy
+fi
 docker compose up -d --wait --wait-timeout 180 postgres
 # Ownership migrations require a brief write pause: old API/bot binaries cannot
 # write safely while the collection schema and saved credentials are upgraded.

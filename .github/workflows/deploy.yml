@@ -240,6 +240,13 @@ jobs:
           DISCORD_BOT_ENV: ${{ secrets.DISCORD_BOT_ENV }}
           OBSERVABILITY_ENV: ${{ secrets.OBSERVABILITY_ENV }}
         run: |
+          if [[ "${{ vars.STATUS_ENABLED }}" == "true" ]]; then
+            umask 077
+            tofu -chdir=infra/terraform output -json status_secrets | \
+              jq --arg url "https://status.${{ vars.DOMAIN }}/operator" \
+                '{url: $url, secret: .OPERATOR_SECRET}' > "$RUNNER_TEMP/status-maintenance.json"
+            export STATUS_MAINTENANCE_FILE="$RUNNER_TEMP/status-maintenance.json"
+          fi
           if [[ "$BOT_ENABLED" == "true" ]]; then
             [[ -n "$DISCORD_BOT_ENV" ]] || { echo 'Missing DISCORD_BOT_ENV secret'; exit 1; }
             umask 077
@@ -261,6 +268,6 @@ jobs:
       - name: Remove temporary secrets
         if: always()
         run: |
-          for file in "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env" "$RUNNER_TEMP/observability.env" "$RUNNER_TEMP/admin-origin.crt" "$RUNNER_TEMP/admin-origin.key"; do
+          for file in "$RUNNER_TEMP/status-maintenance.json" "$RUNNER_TEMP/api.env" "$RUNNER_TEMP/postgres.env" "$RUNNER_TEMP/bot.env" "$RUNNER_TEMP/observability.env" "$RUNNER_TEMP/admin-origin.crt" "$RUNNER_TEMP/admin-origin.key"; do
             if [[ -f "$file" ]]; then unlink "$file"; fi
           done

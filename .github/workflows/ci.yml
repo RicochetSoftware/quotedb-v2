@@ -23,6 +23,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: python3 -m unittest discover -s infra/droplet -p 'test_*.py'
       - run: pnpm --filter @quotedb/status test
       # API integration tests start a real Postgres 17 via Testcontainers (Docker is on the runner).
       - run: pnpm test:coverage

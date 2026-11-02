@@ -1,0 +1,9 @@
+[Unit]
+Description=QuoteDB maintenance-aware nightly reboot check
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -173,7 +173,9 @@ an empty volume; password rotation requires an SQL password change as well as up
   256 MB, API to 320 MB, and Caddy to 128 MB resident memory; swap limits add some burst capacity.
   This is a starting budget for the small workload, not a load-tested capacity guarantee.
 - PostgreSQL uses 64 MB shared buffers and 30 connections. Node has a 192 MB old-space limit.
-- Security/regular OS updates run unattended, with automatic reboots at 04:00 UTC. Reboots
+- Security/regular OS updates run unattended, with automatic reboots at 04:00 UTC when needed.
+  With status monitoring enabled, releases install a maintenance-aware reboot timer
+  that registers ten minutes of maintenance before restarting. Reboots
   briefly take all services offline. Containers restart automatically.
 - The cloud firewall and UFW allow SSH, HTTP, HTTPS, and HTTP/3; SSH is key-only for `deploy`.
 - Daily `ops-check.yml` checks updates, reboots, disk, containers, and backups. Public health
