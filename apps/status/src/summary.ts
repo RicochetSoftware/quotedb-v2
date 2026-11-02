@@ -7,8 +7,15 @@ interface Row extends Totals {
 }
 const empty = (): Totals => ({ available: 0, unavailable: 0, degraded: 0, maintenance: 0 })
 function add(a: Totals, b: Totals) {
-  for (const key of ['available', 'unavailable', 'degraded', 'maintenance'] as const)
-    a[key] += b[key]
+  for (const key of [
+    'available',
+    'unavailable',
+    'degraded',
+    'maintenance',
+    'maintenance_available',
+    'maintenance_unavailable',
+  ] as const)
+    a[key] = (a[key] ?? 0) + (b[key] ?? 0)
 }
 export async function summarize(env: Env, now: number) {
   const marker = await env.DB.prepare(
@@ -20,16 +27,18 @@ export async function summarize(env: Env, now: number) {
       Math.floor(now / DAY) * DAY - 89 * DAY,
     ),
     env.DB.prepare(`WITH ordered AS (
-      SELECT component,outcome,observed_at,
+      SELECT component,outcome,reason,observed_at,
         LEAD(observed_at,1,?) OVER(PARTITION BY component ORDER BY observed_at) AS next_at
       FROM check_samples WHERE observed_at>=?
     ), spans AS (
-      SELECT component,outcome,MAX(0,MIN(next_at,observed_at+180000,?)-MAX(observed_at,?))/1000.0 AS seconds FROM ordered
+      SELECT component,outcome,reason,MAX(0,MIN(next_at,observed_at+180000,?)-MAX(observed_at,?))/1000.0 AS seconds FROM ordered
     ) SELECT component,
       SUM(CASE WHEN outcome IN ('healthy','slow') THEN seconds ELSE 0 END) AS available,
       SUM(CASE WHEN outcome='failed' THEN seconds ELSE 0 END) AS unavailable,
       SUM(CASE WHEN outcome='slow' THEN seconds ELSE 0 END) AS degraded,
-      SUM(CASE WHEN outcome='maintenance' THEN seconds ELSE 0 END) AS maintenance
+      SUM(CASE WHEN outcome='maintenance' THEN seconds ELSE 0 END) AS maintenance,
+      SUM(CASE WHEN outcome='maintenance' AND reason IN ('maintenance:healthy','maintenance:slow') THEN seconds ELSE 0 END) AS maintenance_available,
+      SUM(CASE WHEN outcome='maintenance' AND reason='maintenance:failed' THEN seconds ELSE 0 END) AS maintenance_unavailable
     FROM spans GROUP BY component`).bind(now, now - DAY - 180000, now, now - DAY),
     env.DB.prepare('SELECT data FROM component_state'),
   ])

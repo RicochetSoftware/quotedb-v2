@@ -158,12 +158,17 @@ Successful releases request recovery after Compose health checks. The IDs are sa
 request recovery after a restart. The monitor closes each requested window only after
 receiving a healthy probe (or bot heartbeat) newer than that request. Old, failed, slow,
 or missing samples cannot close a window. Overlapping windows remain independent.
-Maintenance-only history slots are not red; failures outside a window still are.
+Completed maintenance keeps history slots green (unless there was separate degradation or an unplanned failure). Active maintenance remains blue. Tooltips show total downtime and its scheduled portion.
 Measurements have one-minute resolution; summaries refresh every 30 minutes.
 
 Windows expire automatically after ten minutes even if deployment or recovery fails;
-failures after expiry count as downtime. Healthy time within a window is also excluded
-from uptime. A partially failed registration may leave a window for the components
+failures after expiry count as unplanned downtime. Original check outcomes are preserved
+as `maintenance:healthy`, `maintenance:slow`, `maintenance:failed`, or
+`maintenance:unknown` in the raw sample reason. Uptime includes measured scheduled
+failures and successful maintenance checks; only unknown measurements are excluded.
+Legacy maintenance without its original outcome remains unmeasured, not invented
+as either uptime or downtime. Daily rollups retain scheduled available/unavailable
+seconds separately so planned failures affect uptime without making the day red. A partially failed registration may leave a window for the components
 already registered, but does not interrupt services. On 2026-11-02, the two original fixed deployment windows were corrected using
 successful deployment logs (runs 41430051685 and 41453752870). One sampled minute
 per deployment was retained to cover the interruption and probe delay; subsequent
@@ -198,8 +203,8 @@ unknown after 180 seconds. Missing gateway latency is unknown, never zero.
 
 Raw observations count toward uptime even before incident confirmation. Intervals
 end at the next observation, capped at 180 seconds and split at UTC midnight.
-Successful slow time is available and separately degraded. Unknown/maintenance
-are excluded from the denominator with coverage shown. There is no fabricated
+Successful slow time is available and separately degraded. Unknown measurements are excluded from the denominator with coverage shown;
+measured maintenance successes and failures are included. There is no fabricated
 pre-monitoring history. 24 hours is rolling; 30/90 days are UTC calendar windows
 including today. History summaries update every 30 minutes; daily totals include
 bounded current observations. Public snapshots update independently each minute.

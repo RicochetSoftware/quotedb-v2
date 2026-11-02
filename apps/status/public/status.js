@@ -82,7 +82,7 @@ function render(data, failed = false) {
           node('div', `${(w.coverage * 100).toFixed(1)}% coverage`, 'detail'),
           node(
             'div',
-            `${minutes(w.unavailable)} downtime · ${minutes(w.unknown)} unknown · ${minutes(w.maintenance)} maintenance`,
+            `${minutes(w.downtime ?? w.unavailable)} downtime · ${minutes(w.unknown)} unknown · ${minutes(w.maintenance)} maintenance`,
             'detail',
           ),
         )
@@ -96,16 +96,14 @@ function render(data, failed = false) {
           ? 'down'
           : d.degraded > 0
             ? 'degraded'
-            : d.maintenance > 0
-              ? 'maintenance'
-              : d.percent === null
-                ? 'unknown'
-                : 'operational'
+            : d.percent === null && d.maintenance === 0
+              ? 'unknown'
+              : 'operational'
       const bar = node('button', undefined, `day ${state}`)
       bar.type = 'button'
       bar.setAttribute(
         'aria-label',
-        `${new Date(d.day).toISOString().slice(0, 10)}: ${pct(d.percent)} available, ${(d.coverage * 100).toFixed(1)}% coverage, ${minutes(d.unavailable)} downtime, ${minutes(d.unknown)} unknown, ${minutes(d.maintenance)} maintenance`,
+        `${new Date(d.day).toISOString().slice(0, 10)}: ${pct(d.percent)} available, ${(d.coverage * 100).toFixed(1)}% coverage, ${minutes(d.downtime ?? d.unavailable)} downtime, ${minutes(d.unknown)} unknown, ${minutes(d.maintenance)} maintenance, ${minutes(d.maintenance_unavailable ?? 0)} downtime during maintenance`,
       )
       history.append(bar)
     }

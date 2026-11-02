@@ -54,7 +54,8 @@ def register(config, reason, opener=None, state_path=None):
     } for component in ('web', 'admin', 'bot', 'api', 'site')]
     if state_path:
         # Persist before sending so a reboot cannot lose the IDs.
-        state_path.write_text(json.dumps([body['id'] for body in bodies]))
+        pending = json.loads(state_path.read_text()) if state_path.exists() else []
+        state_path.write_text(json.dumps(pending + [body['id'] for body in bodies]))
     send(config, bodies, opener)
     print('Registered maintenance with a ten-minute maximum.')
 

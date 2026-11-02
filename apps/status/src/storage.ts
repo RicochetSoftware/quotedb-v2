@@ -34,6 +34,8 @@ export async function commit(
     unavailable: number
     degraded: number
     maintenance: number
+    maintenance_available?: number
+    maintenance_unavailable?: number
   }[] = []
   for (const observation of observations) {
     const old = previous.find((s) => s.component === observation.component)
@@ -97,14 +99,20 @@ export async function commit(
     env.DB.prepare(`INSERT INTO component_state SELECT json_extract(value,'$.component'),value
       FROM json_each(?) WHERE ${guard}
       ON CONFLICT(component) DO UPDATE SET data=excluded.data`).bind(JSON.stringify(states), token),
-    env.DB.prepare(`INSERT INTO daily_rollups
+    env.DB.prepare(`INSERT INTO daily_rollups (component,day,available,unavailable,degraded,maintenance,maintenance_available,maintenance_unavailable)
       SELECT json_extract(value,'$.component'),json_extract(value,'$.day'),
         json_extract(value,'$.available'),json_extract(value,'$.unavailable'),
-        json_extract(value,'$.degraded'),json_extract(value,'$.maintenance')
+        json_extract(value,'$.degraded'),json_extract(value,'$.maintenance'),
+        COALESCE(json_extract(value,'$.maintenance_available'),0),COALESCE(json_extract(value,'$.maintenance_unavailable'),0)
       FROM json_each(?) WHERE ${guard}
       ON CONFLICT(component,day) DO UPDATE SET available=available+excluded.available,
       unavailable=unavailable+excluded.unavailable,degraded=degraded+excluded.degraded,
-      maintenance=maintenance+excluded.maintenance`).bind(JSON.stringify(rollups), token),
+      maintenance=maintenance+excluded.maintenance,
+      maintenance_available=maintenance_available+excluded.maintenance_available,
+      maintenance_unavailable=maintenance_unavailable+excluded.maintenance_unavailable`).bind(
+      JSON.stringify(rollups),
+      token,
+    ),
   )
   const transitions = states.filter(
     (s) =>

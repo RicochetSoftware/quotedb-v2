@@ -66,7 +66,9 @@ class MaintenanceTests(unittest.TestCase):
             state = Path(directory) / 'active.json'
             opener = self.opener()
             maintenance.register(self.config, 'reboot', opener, state)
+            maintenance.register(self.config, 'deploy', opener, state)
             ids = json.loads(state.read_text())
+            self.assertEqual(len(ids), 10)
             failed = self.opener()
             failed.open.side_effect = URLError('offline')
             with patch.object(maintenance.time, 'sleep'):

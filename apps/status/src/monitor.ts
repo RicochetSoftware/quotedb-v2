@@ -77,8 +77,8 @@ export async function evaluate(env: Env, now = Date.now()) {
       } else covered = true
     }
     if (covered) {
+      observation.reason = `maintenance:${observation.outcome}`
       observation.outcome = 'maintenance'
-      observation.reason = null
     }
   }
   if (recovered.length)

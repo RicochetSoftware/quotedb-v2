@@ -376,3 +376,37 @@ it('counts failures inside maintenance as maintenance and failures after expiry 
   ).first()
   expect(totals).toEqual({ maintenance: 120, unavailable: 60 })
 })
+
+it('includes measured maintenance failures in uptime without counting healthy maintenance as downtime', async () => {
+  const e = env()
+  const start = 600000
+  const outcomes = [
+    { outcome: 'healthy', reason: null },
+    { outcome: 'maintenance', reason: 'maintenance:healthy' },
+    { outcome: 'maintenance', reason: 'maintenance:failed' },
+    { outcome: 'maintenance', reason: 'maintenance:slow' },
+    { outcome: 'maintenance', reason: null }, // Legacy data: never invent a measurement.
+    { outcome: 'healthy', reason: null },
+  ] as const
+  for (const [i, entry] of outcomes.entries()) {
+    const at = start + i * 60000
+    await commit(
+      e,
+      Math.floor(at / 60000),
+      [{ ...observation(entry.outcome, at), reason: entry.reason }],
+      await loadStates(e),
+    )
+  }
+  await summarize(e, start + 360000)
+  const row = await e.DB.prepare('SELECT data FROM summary').first<{ data: string }>()
+  const data = JSON.parse(row?.data ?? '{}').api
+  for (const total of [...data.windows, data.days.at(-1)]) {
+    expect(total.maintenance).toBe(240)
+    expect(total.maintenance_available).toBe(120)
+    expect(total.maintenance_unavailable).toBe(60)
+    expect(total.maintenance_unknown).toBe(60)
+    expect(total.unavailable).toBe(0) // Daily slot does not turn red.
+    expect(total.downtime).toBe(60)
+    expect(total.percent).toBe(80) // 240 healthy / 300 measured; unknown excluded.
+  }
+})

@@ -67,6 +67,8 @@ export interface Totals {
   unavailable: number
   degraded: number
   maintenance: number
+  maintenance_available?: number
+  maintenance_unavailable?: number
 }
 export function interval(
   observation: Observation,
@@ -85,6 +87,15 @@ export function interval(
         unavailable: observation.outcome === 'failed' ? seconds : 0,
         degraded: observation.outcome === 'slow' ? seconds : 0,
         maintenance: observation.outcome === 'maintenance' ? seconds : 0,
+        maintenance_available:
+          observation.outcome === 'maintenance' &&
+          ['maintenance:healthy', 'maintenance:slow'].includes(observation.reason ?? '')
+            ? seconds
+            : 0,
+        maintenance_unavailable:
+          observation.outcome === 'maintenance' && observation.reason === 'maintenance:failed'
+            ? seconds
+            : 0,
       },
     })
     start = next
@@ -92,11 +103,21 @@ export function interval(
   return result
 }
 export function availability(totals: Totals, seconds: number) {
-  const measured = totals.available + totals.unavailable
+  const available = totals.available + (totals.maintenance_available ?? 0)
+  const downtime = totals.unavailable + (totals.maintenance_unavailable ?? 0)
+  const measured = available + downtime
+  const unmeasuredMaintenance = Math.max(
+    0,
+    totals.maintenance -
+      (totals.maintenance_available ?? 0) -
+      (totals.maintenance_unavailable ?? 0),
+  )
   return {
     ...totals,
-    unknown: Math.max(0, seconds - measured - totals.maintenance),
+    downtime,
+    maintenance_unknown: unmeasuredMaintenance,
+    unknown: Math.max(0, seconds - measured - unmeasuredMaintenance),
     coverage: seconds > 0 ? measured / seconds : 0,
-    percent: measured > 0 ? (totals.available / measured) * 100 : null,
+    percent: measured > 0 ? (available / measured) * 100 : null,
   }
 }
