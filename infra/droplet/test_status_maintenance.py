@@ -32,6 +32,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(len({b['id'] for b in bodies}), 5)
         for request, body in zip(requests, bodies):
             self.assertEqual(request.get_header('Authorization'), 'Bearer ' + 'x' * 32)
+            self.assertEqual(request.get_header('User-agent'), 'QuoteDB-Maintenance/1.0')
             self.assertEqual(body['start'], 1_000_000)
             self.assertEqual(body['end'] - body['start'], 600_000)
 

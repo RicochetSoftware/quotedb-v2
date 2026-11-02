@@ -35,6 +35,7 @@ def register(config, reason, opener=None):
         }).encode()
         request = Request(url, data=body, headers={
             'Authorization': f'Bearer {secret}', 'Content-Type': 'application/json',
+            'User-Agent': 'QuoteDB-Maintenance/1.0',
         }, method='POST')
         # Reuse the operation ID on retries: the operator API is idempotent.
         for attempt in range(3):
