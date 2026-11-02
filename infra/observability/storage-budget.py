@@ -14,7 +14,7 @@ db.executemany('INSERT INTO check_samples VALUES(?,?,?,?,?,?)',
 db.executemany('INSERT INTO evaluations VALUES(?,?,?)',
     ((bucket, f'00000000-0000-0000-0000-{bucket:012d}', 1793500000000 + bucket * 60000)
      for bucket in range(14 * 1440)))
-db.executemany('INSERT INTO daily_rollups VALUES(?,?,?,?,?,?)',
+db.executemany('INSERT INTO daily_rollups (component,day,available,unavailable,degraded,maintenance) VALUES(?,?,?,?,?,?)',
     ((component, day * 86400000, 86000.1, 100.2, 100.3, 200.4)
      for day in range(400) for component in components))
 db.commit()
