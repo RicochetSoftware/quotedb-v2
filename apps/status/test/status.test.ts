@@ -269,3 +269,24 @@ it('exports current gauges before a stale metrics backlog', async () => {
   ])
   vi.unstubAllGlobals()
 })
+
+it('serves a small cross-origin notice without history or incident notes', async () => {
+  const { default: worker } = await import('../src/public')
+  const testEnv = env()
+  await testEnv.DB.prepare('INSERT INTO public_snapshot VALUES(1,?)')
+    .bind(
+      JSON.stringify({
+        stale: false,
+        components: [
+          { component: 'api', status: 'down', lastCheck: Date.now(), history: { large: true } },
+        ],
+        notes: [{ note: 'Incident detail' }],
+      }),
+    )
+    .run()
+  const response = await worker.fetch(new Request('https://status.example/api/notice'), testEnv)
+  expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  expect(await response.json()).toEqual({
+    components: [{ component: 'api', status: 'down', lastCheck: expect.any(Number) }],
+  })
+})

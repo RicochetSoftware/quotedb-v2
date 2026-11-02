@@ -260,3 +260,18 @@ The full application release restored ordinary GHCR image ownership and all five
 containers were healthy/running. The independent ops-check passed endpoint,
 freshness and shared Cloudflare quota checks. Four Grafana rules evaluated healthy;
 Grafana accepted the authorized email contact-point test.
+
+## Site and web app service notices
+
+Both navigation bars link to the public status page. Their yellow notice uses
+`GET /api/notice`, a cross-origin, read-only projection of the existing public
+snapshot containing component status and observation timestamps. It reports only
+confirmed `down` or `degraded` components with observations no older than three
+minutes. Monitoring failures, unknown status and maintenance do not imply an outage.
+The notice clears on recovery or when fresh monitoring cannot be obtained.
+
+Visible pages refresh once per minute and when returning to the tab; hidden tabs
+pause polling. Each continuously visible tab adds up to 1,440 requests/day (plus
+visibility changes) to the shared Workers quota and one snapshot row read per
+uncached request. This adds no cron triggers or database writes. Include public
+traffic in the existing Free-budget checks.

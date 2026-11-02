@@ -1,4 +1,6 @@
 ---
+import { STATUS_URL } from '@quotedb/shared'
+import StatusNotice from '../components/StatusNotice.astro'
 import Base from '../layouts/Base.astro'
 
 const appUrl = import.meta.env.PUBLIC_WEB_URL ?? 'http://localhost:5180'
@@ -7,10 +9,14 @@ const year = new Date().getFullYear()
 
 <Base title="Elmu Quote Database">
   <main class="mx-auto flex min-h-svh max-w-3xl flex-col px-6">
-    <header class="flex items-center justify-between py-6">
+    <header class="flex items-center justify-between gap-4 py-6">
       <span class="font-semibold">Elmu Quote Database</span>
+      <nav class="flex shrink-0 items-center gap-4">
+      <a href={STATUS_URL} class="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white">Status</a>
       <a href={`${appUrl}/login`} class="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white">Log in</a>
+      </nav>
     </header>
+    <StatusNotice />
 
     <section class="flex flex-1 flex-col justify-center gap-8 py-16">
       <h1 class="text-4xl font-semibold tracking-tight sm:text-6xl">

@@ -1,0 +1,20 @@
+---
+import { STATUS_URL } from '@quotedb/shared'
+---
+<div role="status" aria-live="polite">
+  <aside id="service-notice" hidden class="rounded-md border border-yellow-300 bg-yellow-100 px-4 py-3 text-sm text-yellow-950 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-100">
+    <span data-message></span>
+    <a href={STATUS_URL} class="font-medium underline underline-offset-2">View status</a>
+  </aside>
+</div>
+<script>
+  import { watchServiceStatus } from '@quotedb/shared'
+  const notice = document.querySelector<HTMLElement>('#service-notice')
+  const message = notice?.querySelector('[data-message]')
+  if (notice && message) {
+    watchServiceStatus((text) => {
+      message.textContent = text ? `${text} ` : ''
+      notice.hidden = !text
+    })
+  }
+</script>

@@ -88,15 +88,33 @@ export default {
       return env.MONITOR.fetch(request)
     if (request.method !== 'GET' && request.method !== 'HEAD')
       return new Response('Method not allowed', { status: 405 })
-    if (path !== '/api/status') return env.ASSETS.fetch(request)
+    if (path !== '/api/status' && path !== '/api/notice') return env.ASSETS.fetch(request)
     try {
-      return Response.json(await readSnapshot(env, Date.now()), {
-        headers: { 'Cache-Control': 'public, max-age=10', 'X-Content-Type-Options': 'nosniff' },
+      const snapshot = await readSnapshot(env, Date.now())
+      const data =
+        path === '/api/notice'
+          ? {
+              components: snapshot.components.map(({ component, status, lastCheck }) => ({
+                component,
+                status,
+                lastCheck,
+              })),
+            }
+          : snapshot
+      return Response.json(data, {
+        headers: {
+          'Cache-Control': 'public, max-age=10',
+          'X-Content-Type-Options': 'nosniff',
+          'Access-Control-Allow-Origin': '*',
+        },
       })
     } catch {
       return Response.json(
         { stale: true, error: 'Monitoring unavailable' },
-        { status: 503, headers: { 'Cache-Control': 'no-store' } },
+        {
+          status: 503,
+          headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+        },
       )
     }
   },

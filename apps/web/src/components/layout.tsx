@@ -1,10 +1,11 @@
-import { isAdminRole } from '@quotedb/shared'
+import { isAdminRole, STATUS_URL } from '@quotedb/shared'
 import { Button, ThemeToggle, toast } from '@quotedb/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { QuoteIcon } from 'lucide-react'
 import { api, errorMessage, meQuery } from '../api'
 import { CollectionOutlet, CollectionPicker, CollectionProvider } from './collections'
+import { ServiceNotice } from './service-notice'
 
 const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5181'
 
@@ -31,13 +32,13 @@ export function Layout() {
     <CollectionProvider key={me?.id ?? 'anonymous'} userId={me?.id}>
       <div className="flex min-h-svh flex-col">
         <header className="border-b">
-          <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4">
+          <div className="mx-auto flex min-h-14 max-w-4xl flex-wrap items-center gap-4 px-4 py-2">
             <Link to="/" className="flex items-center gap-2 font-semibold">
               <QuoteIcon className="size-5" aria-hidden />
               <span className="hidden sm:inline">Elmu Quote Database</span>
             </Link>
             {me && (
-              <nav className="flex items-center gap-4">
+              <nav className="order-last flex w-full items-center gap-4 sm:order-none sm:w-auto">
                 <Link to="/quotes" className={navLink} activeProps={activeLink}>
                   Quotes
                 </Link>
@@ -55,6 +56,9 @@ export function Layout() {
               </nav>
             )}
             <div className="ml-auto flex items-center gap-2">
+              <a href={STATUS_URL} className={navLink}>
+                Status
+              </a>
               <ThemeToggle />
               {me ? (
                 <Button variant="outline" size="sm" onClick={logout}>
@@ -68,6 +72,7 @@ export function Layout() {
             </div>
           </div>
         </header>
+        <ServiceNotice />
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
           {me && <CollectionPicker />}
           <CollectionOutlet />
