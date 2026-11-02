@@ -61,20 +61,39 @@ class MaintenanceTests(unittest.TestCase):
             maintenance.register({**self.config, 'url': 'http://example.com'}, 'deploy', opener)
         opener.open.assert_not_called()
 
+    def test_finish_uses_persisted_ids_and_retries_after_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'active.json'
+            opener = self.opener()
+            maintenance.register(self.config, 'reboot', opener, state)
+            ids = json.loads(state.read_text())
+            failed = self.opener()
+            failed.open.side_effect = URLError('offline')
+            with patch.object(maintenance.time, 'sleep'):
+                with self.assertRaises(RuntimeError):
+                    maintenance.finish(self.config, state, failed)
+            self.assertTrue(state.exists())
+            finish = self.opener()
+            maintenance.finish(self.config, state, finish)
+            bodies = [json.loads(c.args[0].data) for c in finish.open.call_args_list]
+            self.assertEqual([b['id'] for b in bodies], ids)
+            self.assertTrue(all(b['kind'] == 'maintenance-recovery' for b in bodies))
+            self.assertFalse(state.exists())
+
     def test_redirects_are_not_followed(self):
         self.assertIsNone(maintenance.NoRedirect().redirect_request(
             None, None, 307, '', {}, 'https://other.example.com'))
 
 
 class InterruptionTests(unittest.TestCase):
-    def run_script(self, script, registration_exit, required=True):
+    def run_script(self, script, registration_exit, required=True, docker_exit=0):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'status-maintenance.json').write_text('{}')
             if required:
                 (root / 'reboot-required').touch()
             for command in ('python3', 'systemctl', 'docker', 'flock'):
-                code = registration_exit if command == 'python3' else 0
+                code = registration_exit if command == 'python3' else docker_exit if command == 'docker' else 0
                 path = root / command
                 path.write_text(f'#!/bin/sh\necho {command} >> "$CALL_LOG"\nexit {code}\n')
                 path.chmod(0o700)
@@ -100,6 +119,17 @@ class InterruptionTests(unittest.TestCase):
         code, calls = self.run_script(script, 0, required=False)
         self.assertEqual(code, 0)
         self.assertEqual(calls, ['flock'])
+
+    def test_release_requests_recovery_only_after_compose_health_passes(self):
+        release = Path(__file__).with_name('release.sh').read_text()
+        script = 'docker compose up -d --remove-orphans' + release.split(
+            'docker compose up -d --remove-orphans', 1)[1].split('# Keep recent images', 1)[0]
+        code, calls = self.run_script(script, 0, docker_exit=1)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(calls, ['docker'])
+        code, calls = self.run_script(script, 0)
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ['docker', 'python3'])
 
     def test_release_cannot_replace_postgres_without_registration(self):
         release = Path(__file__).with_name('release.sh').read_text()

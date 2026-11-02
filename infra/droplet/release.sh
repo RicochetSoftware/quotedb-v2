@@ -36,8 +36,9 @@ if [[ -f "$stage/status-maintenance.json" ]]; then
   install -m 600 "$stage/status-maintenance.json" status-maintenance.json
 fi
 if [[ -f status-maintenance.json ]]; then
-  sudo install -m 644 "$stage/quotedb-reboot.service" "$stage/quotedb-reboot.timer" /etc/systemd/system/
+  sudo install -m 644 "$stage/quotedb-reboot.service" "$stage/quotedb-reboot.timer" "$stage/quotedb-recovery.service" /etc/systemd/system/
   sudo systemctl daemon-reload
+  sudo systemctl enable quotedb-recovery.service
   sudo systemctl enable --now quotedb-reboot.timer
   # Replace unattended-upgrades' direct reboot only after the replacement is enabled.
   printf 'Unattended-Upgrade::Automatic-Reboot "false";\n' | sudo tee /etc/apt/apt.conf.d/99quotedb-maintenance-reboot >/dev/null
@@ -66,5 +67,8 @@ if [[ -f "$stage/bot.env" ]]; then
   docker compose run --rm --no-deps bot-migrate
 fi
 docker compose up -d --remove-orphans --wait --wait-timeout 180
+if [[ -f status-maintenance.json ]]; then
+  python3 ./status-maintenance.py ./status-maintenance.json finish
+fi
 # Keep recent images for rollback, and never prune volumes.
 docker image prune -af --filter 'until=168h' >/dev/null

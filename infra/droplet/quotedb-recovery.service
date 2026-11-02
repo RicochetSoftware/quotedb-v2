@@ -1,0 +1,17 @@
+[Unit]
+Description=Request fresh QuoteDB recovery checks after reboot
+Wants=network-online.target
+After=network-online.target docker.service
+ConditionPathExists=/opt/quotedb/status-maintenance.active.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/quotedb
+ExecStart=/usr/bin/flock -w 600 /opt/quotedb/.deploy.lock /usr/bin/python3 /opt/quotedb/status-maintenance.py /opt/quotedb/status-maintenance.json finish
+TimeoutStartSec=12min
+Restart=on-failure
+RestartSec=15s
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

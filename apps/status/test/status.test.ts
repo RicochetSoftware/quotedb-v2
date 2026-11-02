@@ -290,3 +290,89 @@ it('serves a small cross-origin notice without history or incident notes', async
     components: [{ component: 'api', status: 'down', lastCheck: expect.any(Number) }],
   })
 })
+
+it('ends only requested maintenance after fresh healthy recovery, preserving overlapping windows', async () => {
+  const { evaluate } = await import('../src/monitor')
+  const e = { ...env(), DISTRIBUTED_PROBES: 'true' }
+  const start = 600000
+  const seed = async (at: number, outcome: string) => {
+    for (const component of ['api', 'web', 'admin', 'site']) {
+      await e.DB.prepare('INSERT OR REPLACE INTO probe_samples VALUES(?,?,?)')
+        .bind(component, at, JSON.stringify({ component, at, outcome, duration: 10, reason: null }))
+        .run()
+    }
+  }
+  await e.DB.prepare('INSERT INTO maintenance_windows VALUES(?,?,?,?,?)')
+    .bind('deploy-api', 'api', start, start + 600000, 'deploy')
+    .run()
+  await seed(start, 'healthy')
+  await evaluate(e, start)
+  expect((await loadStates(e)).find((s) => s.component === 'api')?.observation.outcome).toBe(
+    'maintenance',
+  )
+  vi.spyOn(Date, 'now').mockReturnValue(start + 90000)
+  const request = () =>
+    new Request('https://status.test/operator', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${e.OPERATOR_SECRET}` },
+      body: JSON.stringify({ kind: 'maintenance-recovery', id: 'deploy-api', note: '' }),
+    })
+  expect((await operate(request(), e)).status).toBe(204)
+  vi.spyOn(Date, 'now').mockReturnValue(start + 100000)
+  expect((await operate(request(), e)).status).toBe(204)
+  expect(await e.DB.prepare('SELECT requested_at FROM maintenance_recovery').first()).toEqual({
+    requested_at: start + 90000,
+  })
+  await seed(start + 60000, 'healthy')
+  await evaluate(e, start + 120000) // Healthy but predates completion: keep maintenance.
+  expect((await loadStates(e)).find((s) => s.component === 'api')?.observation.outcome).toBe(
+    'maintenance',
+  )
+  await seed(start + 180000, 'failed')
+  await evaluate(e, start + 180000)
+  expect((await loadStates(e)).find((s) => s.component === 'api')?.observation.outcome).toBe(
+    'maintenance',
+  )
+  await e.DB.prepare('INSERT INTO maintenance_windows VALUES(?,?,?,?,?)')
+    .bind('other-api', 'api', start, start + 600000, 'other')
+    .run()
+  await seed(start + 240000, 'healthy')
+  await evaluate(e, start + 240000)
+  expect(
+    await e.DB.prepare("SELECT ends_at FROM maintenance_windows WHERE id='deploy-api'").first(),
+  ).toEqual({ ends_at: start + 240000 })
+  expect((await loadStates(e)).find((s) => s.component === 'api')?.observation.outcome).toBe(
+    'maintenance',
+  )
+})
+
+it('counts failures inside maintenance as maintenance and failures after expiry as downtime', async () => {
+  const { evaluate } = await import('../src/monitor')
+  const e = { ...env(), DISTRIBUTED_PROBES: 'true' }
+  const start = 600000
+  for (const component of ['api', 'web', 'admin', 'site', 'bot'])
+    await e.DB.prepare('INSERT INTO maintenance_windows VALUES(?,?,?,?,?)')
+      .bind(`window-${component}`, component, start, start + 120000, 'test')
+      .run()
+  for (const offset of [0, 60000, 120000, 180000]) {
+    for (const component of ['api', 'web', 'admin', 'site']) {
+      const at = start + offset
+      await e.DB.prepare('INSERT OR REPLACE INTO probe_samples VALUES(?,?,?)')
+        .bind(
+          component,
+          at,
+          JSON.stringify({ component, at, outcome: 'failed', duration: 10, reason: 'http_status' }),
+        )
+        .run()
+    }
+    await evaluate(e, start + offset)
+    const states = await loadStates(e)
+    expect(
+      states.every((s) => s.observation.outcome === (offset < 120000 ? 'maintenance' : 'failed')),
+    ).toBe(true)
+  }
+  const totals = await e.DB.prepare(
+    "SELECT maintenance,unavailable FROM daily_rollups WHERE component='api'",
+  ).first()
+  expect(totals).toEqual({ maintenance: 120, unavailable: 60 })
+})

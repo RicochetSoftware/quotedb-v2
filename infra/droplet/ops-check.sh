@@ -50,6 +50,8 @@ if docker compose config --services 2>/dev/null | grep -qx discord-bot; then
 fi
 if [[ -f status-maintenance.json ]]; then
   systemctl is-active --quiet quotedb-reboot.timer || fail "maintenance reboot timer is inactive"
+  systemctl is-enabled --quiet quotedb-recovery.service || fail "maintenance recovery service is disabled"
+  systemctl is-failed --quiet quotedb-recovery.service && fail "maintenance recovery service failed"
   systemctl is-failed --quiet quotedb-reboot.service && fail "maintenance reboot service failed"
 fi
 systemctl is-active --quiet quotedb-backup.timer || fail "database backup timer is inactive"

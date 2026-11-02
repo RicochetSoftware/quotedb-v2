@@ -153,10 +153,23 @@ window. Registration failure skips the reboot and fails the service; ops-check r
 that failure. The timer does not catch up missed runs after boot. Unscheduled manual
 reboots still need an operator window (or use the maintenance helper before rebooting).
 
+Successful releases request recovery after Compose health checks. The IDs are saved in
+`status-maintenance.active.json` so the boot-time `quotedb-recovery.service` can also
+request recovery after a restart. The monitor closes each requested window only after
+receiving a healthy probe (or bot heartbeat) newer than that request. Old, failed, slow,
+or missing samples cannot close a window. Overlapping windows remain independent.
+Maintenance-only history slots are not red; failures outside a window still are.
+Measurements have one-minute resolution; summaries refresh every 30 minutes.
+
 Windows expire automatically after ten minutes even if deployment or recovery fails;
 failures after expiry count as downtime. Healthy time within a window is also excluded
 from uptime. A partially failed registration may leave a window for the components
-already registered, but does not interrupt services. Existing history is unchanged.
+already registered, but does not interrupt services. On 2026-11-02, the two original fixed deployment windows were corrected using
+successful deployment logs (runs 41430051685 and 41453752870). One sampled minute
+per deployment was retained to cover the interruption and probe delay; subsequent
+excess maintenance samples were reclassified as healthy. Raw samples and rollups
+were backed up before correction. Rebuilt totals preserve all recorded downtime
+and degradation; maintenance fell from 1201.473 to 120.161 seconds per component.
 
 ## State, history and outages
 

@@ -139,6 +139,12 @@ export async function operate(request: Request, env: Env) {
       await env.DB.prepare('INSERT OR IGNORE INTO maintenance_windows VALUES(?,?,?,?,?)')
         .bind(body.id, body.component, body.start, body.end, body.note)
         .run()
+    } else if (body.kind === 'maintenance-recovery') {
+      // Idempotent: retries must not move the freshness boundary forward.
+      await env.DB.prepare(`INSERT OR IGNORE INTO maintenance_recovery
+        SELECT id,? FROM maintenance_windows WHERE id=? AND starts_at<=? AND ends_at>?`)
+        .bind(Date.now(), body.id, Date.now(), Date.now())
+        .run()
     } else if (body.kind === 'note' && typeof body.incident === 'string') {
       await env.DB.prepare("INSERT OR IGNORE INTO incident_events VALUES(?,?,?,'note',?)")
         .bind(body.id, body.incident, Date.now(), body.note)

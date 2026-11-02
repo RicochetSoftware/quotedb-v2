@@ -50,7 +50,7 @@ stage=$(remote 'umask 077; mktemp -d /opt/quotedb/.release.XXXXXXXX')
 [[ $stage =~ ^/opt/quotedb/\.release\.[a-zA-Z0-9]+$ ]] || { echo "Invalid staging path" >&2; exit 1; }
 scp "${ssh_opts[@]}" -q "$here/compose.yaml" "$here/backup.sh" "$here/release.sh" "$here/compose.bot.yaml" "$target:$stage/"
 scp "${ssh_opts[@]}" -q "$here/compose.observability.yaml" "$here/../observability/config.alloy" "$here/../observability/container-metrics.sh" "$here/../observability/quotedb-container-metrics.service" "$here/../observability/quotedb-container-metrics.timer" "$target:$stage/"
-scp "${ssh_opts[@]}" -q "$here/status-maintenance.py" "$here/maintenance-reboot.sh" "$here/quotedb-reboot.service" "$here/quotedb-reboot.timer" "$target:$stage/"
+scp "${ssh_opts[@]}" -q "$here/status-maintenance.py" "$here/maintenance-reboot.sh" "$here/quotedb-reboot.service" "$here/quotedb-reboot.timer" "$here/quotedb-recovery.service" "$target:$stage/"
 if [[ -n ${STATUS_MAINTENANCE_FILE:-} ]]; then
   remote "umask 077; cat > '$stage/status-maintenance.json'" < "$STATUS_MAINTENANCE_FILE"
 fi

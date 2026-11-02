@@ -65,12 +65,25 @@ for (const scenario of [
     scenario === 'stale',
     scenario !== 'no-history',
   )
+  if (scenario === 'maintenance') {
+    for (const component of fixture.components)
+      for (const day of component.history.days) {
+        day.unavailable = 0
+        day.maintenance = 60
+      }
+    // An overrun remains red even on a day that also contains maintenance.
+    fixture.components[0].history.days[89].unavailable = 60
+  }
   await page.goto('http://localhost:8765')
   await page.waitForFunction(
     () => !document.querySelector('#banner').textContent.includes('Checking'),
   )
   assert.equal(await page.locator('.card').count(), 5)
   const banner = await page.locator('#banner').textContent()
+  if (scenario === 'maintenance') {
+    assert.equal(await page.locator('.day.maintenance').count(), 449)
+    assert.equal(await page.locator('.day.down').count(), 1)
+  }
   if (scenario === 'green') assert.match(banner, /All services operational/)
   if (scenario === 'mixed') {
     assert.match(banner, /Service disruption/)
