@@ -83,6 +83,11 @@ for (const scenario of [
   if (scenario === 'maintenance') {
     assert.equal(await page.locator('.day.maintenance').count(), 449)
     assert.equal(await page.locator('.day.down').count(), 1)
+    assert.match(await page.locator('.day.down').getAttribute('aria-label'), /1m downtime/)
+    assert.match(
+      await page.locator('.day.maintenance').first().getAttribute('aria-label'),
+      /0m downtime/,
+    )
   }
   if (scenario === 'green') assert.match(banner, /All services operational/)
   if (scenario === 'mixed') {

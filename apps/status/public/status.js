@@ -8,6 +8,7 @@ const labels = {
 }
 const date = (value) => new Date(value).toLocaleString()
 const pct = (value) => (value === null ? 'No data' : `${value.toFixed(2)}%`)
+const minutes = (seconds) => (seconds > 0 && seconds < 60 ? '<1m' : `${Math.round(seconds / 60)}m`)
 function node(tag, text, className) {
   const element = document.createElement(tag)
   if (text !== undefined) element.textContent = text
@@ -81,7 +82,7 @@ function render(data, failed = false) {
           node('div', `${(w.coverage * 100).toFixed(1)}% coverage`, 'detail'),
           node(
             'div',
-            `${Math.round(w.unknown / 60)}m unknown · ${Math.round(w.maintenance / 60)}m maintenance`,
+            `${minutes(w.unavailable)} downtime · ${minutes(w.unknown)} unknown · ${minutes(w.maintenance)} maintenance`,
             'detail',
           ),
         )
@@ -104,7 +105,7 @@ function render(data, failed = false) {
       bar.type = 'button'
       bar.setAttribute(
         'aria-label',
-        `${new Date(d.day).toISOString().slice(0, 10)}: ${pct(d.percent)} available, ${(d.coverage * 100).toFixed(1)}% coverage, ${Math.round(d.unknown / 60)}m unknown, ${Math.round(d.maintenance / 60)}m maintenance`,
+        `${new Date(d.day).toISOString().slice(0, 10)}: ${pct(d.percent)} available, ${(d.coverage * 100).toFixed(1)}% coverage, ${minutes(d.unavailable)} downtime, ${minutes(d.unknown)} unknown, ${minutes(d.maintenance)} maintenance`,
       )
       history.append(bar)
     }

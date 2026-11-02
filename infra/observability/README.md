@@ -170,6 +170,11 @@ per deployment was retained to cover the interruption and probe delay; subsequen
 excess maintenance samples were reclassified as healthy. Raw samples and rollups
 were backed up before correction. Rebuilt totals preserve all recorded downtime
 and degradation; maintenance fell from 1201.473 to 120.161 seconds per component.
+At the operator's subsequent request, the earlier deployment (run 41366461097) was
+also reclassified from downtime to maintenance: its single 60.246-second sampled
+interruption was confirmed in deployment logs. This brought these three historical
+planned interruptions to 180.407 maintenance seconds and zero unavailable seconds.
+These are explicit audited historical corrections, not automatic reclassification of failures.
 
 ## State, history and outages
 
