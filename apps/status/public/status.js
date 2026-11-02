@@ -8,7 +8,7 @@ const labels = {
 }
 const date = (value) => new Date(value).toLocaleString()
 const pct = (value) => (value === null ? 'No data' : `${value.toFixed(2)}%`)
-const minutes = (seconds) => (seconds > 0 && seconds < 60 ? '<1m' : `${Math.round(seconds / 60)}m`)
+const minutes = (seconds) => (seconds >= 1 && seconds < 60 ? '<1m' : `${Math.round(seconds / 60)}m`)
 function node(tag, text, className) {
   const element = document.createElement(tag)
   if (text !== undefined) element.textContent = text
