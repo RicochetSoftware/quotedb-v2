@@ -12,12 +12,12 @@
     "@quotedb/shared": "workspace:*",
     "@quotedb/ui": "workspace:*",
     "@tanstack/react-query": "5.104.5",
-    "@tanstack/react-router": "1.170.45",
+    "@tanstack/react-router": "1.170.46",
     "lucide-react": "1.61.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-hook-form": "7.90.0",
-    "typebox": "1.4.2"
+    "react-hook-form": "7.91.0",
+    "typebox": "1.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
